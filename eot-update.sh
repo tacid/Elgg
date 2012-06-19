@@ -1,14 +1,15 @@
+my=`pwd`
+script=`dirname $0`
+dir=$my/$script
 echo = 1. Updating CORE
-cd /usr/local/www/elgg
+cd $dir
 echo -n '  '
 git pull
 echo
 echo = 2. Updating modules
-echo ===  2.1 updating event_calendar
-echo -n '    '
-cd /usr/local/www/elgg/mod/event_calendar
-git pull
-echo ===  2.2 updating file_tools
-echo -n '    '
-cd /usr/local/www/elgg/mod/file_tools
-git pull
+for i in event_calendar file_tools widget_manager extended_tinymce embed_extender profile_manager ; do
+    echo === updating $i
+    echo -n '    '
+    cd $dir/mod/$i
+    git pull
+done
