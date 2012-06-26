@@ -20,3 +20,4 @@ $export->url = $entity->getURL();
 
 global $jsonexport;
 $jsonexport[$entity->getType()][$entity->getSubtype()][] = $export;
+

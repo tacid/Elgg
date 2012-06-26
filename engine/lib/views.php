@@ -872,8 +872,7 @@ function elgg_view_entity(ElggEntity $entity, $vars = array(), $bypass = true, $
 	$contents = '';
 	if (elgg_view_exists("$entity_type/$subtype")) {
 		$contents = elgg_view("$entity_type/$subtype", $vars, $bypass, $debug);
-	}
-	if (empty($contents)) {
+	} else {
 		$contents = elgg_view("$entity_type/default", $vars, $bypass, $debug);
 	}
 
@@ -1224,14 +1223,13 @@ function elgg_view_image_block($image, $body, $vars = array()) {
  * @param string $type  The type of module (main, info, popup, aside, etc.)
  * @param string $title A title to put in the header
  * @param string $body  Content of the module
- * @param string $vars  Additional parameters for the module
+ * @param array  $vars  Additional parameters for the module
  *
  * @return string
  * @since 1.8.0
  */
-function elgg_view_module($type, $title, $body, $vars = array()) {
-
-	$vars['class'] = elgg_extract('class', $vars, '') . " elgg-module-$type";
+function elgg_view_module($type, $title, $body, array $vars = array()) {
+	$vars['type'] = $type;
 	$vars['title'] = $title;
 	$vars['body'] = $body;
 	return elgg_view('page/components/module', $vars);
