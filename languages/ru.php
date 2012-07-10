@@ -385,8 +385,8 @@
 			'profile:interests' => "Интересы(вводить через запятую)",
 			'profile:contactemail' => "Контактный email",
 			'profile:phone' => "Домашний телефон",
-			'profile:mobile' => "Мобтльный телефон",
-			'profile:website' => "Личный сайт",
+                        'profile:mobile' => "Мобильный телефон",
+                        'profile:website' => "Личный сайт",
 			'profile:twitter' => "Twitter",
 			'profile:saved' => "Ваши изменения были успешно сохранены.",
 			
