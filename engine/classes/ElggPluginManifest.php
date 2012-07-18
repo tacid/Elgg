@@ -57,6 +57,15 @@ class ElggPluginManifest {
 		'version' => '',
 		'comparison' => 'ge'
 	);
+	
+	/**
+	 * The expected structure of a requires php_version dependency element
+	 */
+	private $depsStructPhpVersion = array(
+		'type' => '',
+		'version' => '',
+		'comparison' => 'ge'
+	);
 
 	/**
 	 * The expected structure of a requires php_ini dependency element
@@ -472,7 +481,7 @@ class ElggPluginManifest {
 	 * Normalizes a dependency array using the defined structs.
 	 * Can be used with either requires or suggests.
 	 *
-	 * @param array $dep An dependency array.
+	 * @param array $dep A dependency array.
 	 * @return array The normalized deps array.
 	 */
 	private function normalizeDep($dep) {
@@ -490,6 +499,10 @@ class ElggPluginManifest {
 				$struct = $this->depsStructPriority;
 				break;
 
+			case 'php_version':
+				$struct = $this->depsStructPhpVersion;
+				break;
+			
 			case 'php_extension':
 				$struct = $this->depsStructPhpExtension;
 				break;
@@ -516,8 +529,10 @@ class ElggPluginManifest {
 							break;
 					}
 				}
-
 				break;
+			default:
+				// unrecognized so we just return the raw dependency
+				return $dep;
 		}
 
 		// @todo $struct may not have been defined...

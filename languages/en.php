@@ -99,6 +99,7 @@ $english = array(
 	'ElggPlugin:Dependencies:Priority' => 'Priority',
 
 	'ElggPlugin:Dependencies:Elgg' => 'Elgg version',
+	'ElggPlugin:Dependencies:PhpVersion' => 'PHP version',
 	'ElggPlugin:Dependencies:PhpExtension' => 'PHP extension: %s',
 	'ElggPlugin:Dependencies:PhpIni' => 'PHP ini setting: %s',
 	'ElggPlugin:Dependencies:Plugin' => 'Plugin: %s',
@@ -438,6 +439,8 @@ $english = array(
 	'river:ingroup' => 'in the group %s',
 	'river:none' => 'No activity',
 	'river:update' => 'Update for %s',
+	'river:delete:success' => 'River item has been deleted',
+	'river:delete:fail' => 'River item could not be deleted',
 
 	'river:widget:title' => "Activity",
 	'river:widget:description' => "Display latest activity",
