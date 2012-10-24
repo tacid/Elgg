@@ -4,7 +4,7 @@
  *
  */
 
-$english = array(
+return array(
 	// menu
 	'admin:developers' => 'Developers',
 	'admin:developers:settings' => 'Developer Settings',
@@ -56,5 +56,3 @@ $english = array(
 	// status messages
 	'developers:settings:success' => 'Settings saved',
 );
-
-add_translation('en', $english);
