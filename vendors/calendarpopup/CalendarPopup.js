@@ -189,7 +189,7 @@ function AnchorPosition_getWindowOffsetTop (el) {
 //  "MMM dd, yyyy hh:mm:ssa" matches: "January 01, 2000 12:30:45AM"
 // ------------------------------------------------------------------
 
-var MONTH_NAMES=new Array('January','February','March','April','May','June','July','August','September','October','November','December','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec');
+var MONTH_NAMES=new Array('January','February','March','April','May','June','July','August','September','Октябрь','November','December','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec');
 var DAY_NAMES=new Array('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sun','Mon','Tue','Wed','Thu','Fri','Sat');
 function LZ(x) {return(x<0||x>9?"":"0")+x}
 
@@ -970,7 +970,7 @@ function CalendarPopup() {
 	c.offsetY = 25;
 	c.autoHide();
 	// Calendar-specific properties
-	c.monthNames = new Array("January","February","March","April","May","June","July","August","September","October","November","December");
+	c.monthNames = new Array("January","February","March","April","May","June","July","August","September","Октябрь","November","December");
 	c.monthAbbreviations = new Array("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec");
 	c.dayHeaders = new Array("S","M","T","W","T","F","S");
 	c.returnFunction = "CP_tmpReturnFunction";
