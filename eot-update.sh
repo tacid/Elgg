@@ -7,7 +7,7 @@ echo -n '  '
 git pull
 echo
 echo = 2. Updating modules
-for i in event_calendar file_tools widget_manager extended_tinymce embed_extender profile_manager izap-diskquota ; do
+for i in event_calendar file_tools widget_manager extended_tinymce embed_extender profile_manager izap-diskquota group_tools html_email_handler profileiconaccess editable_comments ; do
     echo === updating $i
     echo -n '    '
     cd $dir/mod/$i
