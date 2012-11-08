@@ -17,12 +17,12 @@ body {
 }
 
 a {
-	color: #4690D6;
+	color: #D64646;
 }
 
 a:hover,
 a.selected { <?php //@todo remove .selected ?>
-	color: #555555;
+	color: #A00;
 	text-decoration: underline;
 }
 
@@ -77,7 +77,7 @@ blockquote {
 
 h1, h2, h3, h4, h5, h6 {
 	font-weight: bold;
-	color: #0054A7;
+	color: #AA5557;
 }
 
 h1 { font-size: 1.8em; }
@@ -103,7 +103,7 @@ h6 { font-size: 0.8em; }
 	margin-right: 10px;
 }
 .elgg-heading-basic {
-	color: #0054A7;
+	color: #AA5457;
 	font-size: 1.2em;
 	font-weight: bold;
 }
@@ -126,7 +126,7 @@ h6 { font-size: 0.8em; }
 }
 
 .elgg-loud {
-	color: #0054A7;
+	color: #AA5457;
 }
 
 /* ***************************************

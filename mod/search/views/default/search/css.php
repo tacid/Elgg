@@ -25,7 +25,7 @@ Search plugin
 	-moz-border-radius: 10px;
 	border-radius: 10px;
 	
-	border: 1px solid #71b9f7;
+	border: 1px solid #f7b971;
 	color: white;
 	font-size: 12px;
 	font-weight: bold;

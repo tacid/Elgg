@@ -26,12 +26,12 @@
 	border-radius: 4px;
 	
 	padding: 2px 6px;
-	color: #4690d6;
-	border: 1px solid #4690d6;
+	color: #D65050;
+	border: 1px solid #D65050;
 	font-size: 12px;
 }
 .elgg-pagination a:hover {
-	background: #4690d6;
+	background: #D65050;
 	color: white;
 	text-decoration: none;
 }
@@ -74,7 +74,7 @@
 }
 .elgg-tabs a:hover {
 	background: #dedede;
-	color: #4690D6;
+	color: #D65050;
 }
 .elgg-tabs .elgg-state-selected {
 	border-color: #ccc;
@@ -108,7 +108,7 @@
 	color: #999;
 }
 .elgg-breadcrumbs > li > a:hover {
-	color: #0054a7;
+	color: #AA5457;
 	text-decoration: underline;
 }
 
@@ -136,7 +136,7 @@
 }
 
 .elgg-menu-topbar > li > a:hover {
-	color: #4690D6;
+	color: #D65050;
 	text-decoration: none;
 }
 
@@ -248,7 +248,7 @@
 }
 
 .elgg-menu-site-more > li > a:hover {
-	background: #4690D6;
+	background: #D65050;
 	color: white;
 }
 
@@ -310,7 +310,7 @@
 }
 .elgg-menu-filter > li > a:hover {
 	background: #dedede;
-	color: #4690D6;
+	color: #D65050;
 }
 .elgg-menu-filter > .elgg-state-selected {
 	border-color: #ccc;
@@ -341,12 +341,12 @@
 	padding: 2px 4px 2px 8px;
 }
 .elgg-menu-page a:hover {
-	background-color: #0054A7;
+	background-color: #AA5457;
 	color: white;
 	text-decoration: none;
 }
 .elgg-menu-page li.elgg-state-selected > a {
-	background-color: #4690D6;
+	background-color: #D65050;
 	color: white;
 }
 .elgg-menu-page .elgg-child-menu {
@@ -486,12 +486,12 @@
 	padding: 2px 4px 2px 8px;
 }
 .elgg-menu-owner-block li a:hover {
-	background-color: #0054A7;
+	background-color: #AA5457;
 	color: white;
 	text-decoration: none;
 }
 .elgg-menu-owner-block li.elgg-state-selected > a {
-	background-color: #4690D6;
+	background-color: #D65050;
 	color: white;
 }
 

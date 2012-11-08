@@ -133,7 +133,7 @@
 	background-color: red;
 }
 .elgg-state-notice {
-	background-color: #4690D6;
+	background-color: #D65050;
 }
 
 /* ***************************************
@@ -179,7 +179,7 @@
 .elgg-river-comments-tab {
 	display: block;
 	background-color: #EEE;
-	color: #4690D6;
+	color: #D65050;
 	margin-top: 5px;
 	width: auto;
 	float: right;

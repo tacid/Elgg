@@ -37,15 +37,15 @@ a.elgg-button {
 	color: white;
 	text-shadow: 1px 1px 0px black;
 	text-decoration: none;
-	border: 1px solid #4690d6;
-	background: #4690d6 url(<?php echo elgg_get_site_url(); ?>_graphics/button_graduation.png) repeat-x left 10px;
+	border: 1px solid #D65050;
+	background: #D65050 url(<?php echo elgg_get_site_url(); ?>_graphics/button_graduation.png) repeat-x left 10px;
 }
 
 .elgg-button-submit:hover {
-	border-color: #0054a7;
+	border-color: #A74000;
 	text-decoration: none;
 	color: white;
-	background: #0054a7 url(<?php echo elgg_get_site_url(); ?>_graphics/button_graduation.png) repeat-x left 10px;
+	background: #A74000 url(<?php echo elgg_get_site_url(); ?>_graphics/button_graduation.png) repeat-x left 10px;
 }
 
 .elgg-button-submit.elgg-state-disabled {
@@ -119,7 +119,7 @@ a.elgg-button {
 	position:relative;
 	margin-left:0;
 	color: white;
-	border:1px solid #71B9F7;
+	border:1px solid #F7B971;
 	
 	-webkit-border-radius:4px;
 	-moz-border-radius:4px;
@@ -140,7 +140,7 @@ a.elgg-button {
 }
 
 .elgg-button-dropdown:hover {
-	background-color:#71B9F7;
+	background-color:#F7B971;
 	text-decoration:none;
 }
 

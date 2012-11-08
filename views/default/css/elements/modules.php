@@ -48,7 +48,7 @@
 	margin-bottom: 5px;
 }
 .elgg-module-popup > .elgg-head * {
-	color: #0054A7;
+	color: #AA5457;
 }
 
 /* Dropdown */
@@ -78,7 +78,7 @@
 
 /* Featured */
 .elgg-module-featured {
-	border: 1px solid #4690D6;
+	border: 1px solid #D65050;
 	
 	-webkit-border-radius: 6px;
 	-moz-border-radius: 6px;
@@ -86,7 +86,7 @@
 }
 .elgg-module-featured > .elgg-head {
 	padding: 5px;
-	background-color: #4690D6;
+	background-color: #D65050;
 }
 .elgg-module-featured > .elgg-head * {
 	color: white;
@@ -99,6 +99,7 @@
 	Widgets
 *************************************** */
 .elgg-widgets {
+	float: right;
 	min-height: 30px;
 }
 .elgg-widget-add-control {
@@ -138,7 +139,7 @@
 .elgg-module-widget {
 	background-color: #dedede;
 	padding: 2px;
-	margin-bottom: 15px;
+	margin: 0 5px 15px;
 	position: relative;
 }
 .elgg-module-widget:hover {
