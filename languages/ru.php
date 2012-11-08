@@ -1,6 +1,6 @@
 <?php
 
-	$english = array(
+	$russian = array(
 
 		/**
 		 * Sites
@@ -536,7 +536,7 @@
 			'user:password:text' => 'Для генерации нового пароля, введите Ваш логин ниже. Мы вышлем Вам письмо на Ваш электронный адрес.',
 			
 			'user:persistent' => 'Запомнить меня',
-			'walled_garden:welcome' => 'Добро пожаловть в',
+			'walled_garden:welcome' => 'Добро пожаловать в',
 			
 
 		/**
@@ -785,7 +785,7 @@
 			'river:mine' => 'Моя активность',
 			'river:friends' => 'Активность друзей',
 			'river:select' => 'Показать %s',
-			'river:comments:more' => '+% больше',
+			'river:comments:more' => '+%s больше',
 			'river:generic_comment' => 'прокомментировал %s %s',
 
 			'friends:widget:description' => "Выводит на экран ваших друзей.",
@@ -1324,6 +1324,6 @@
 			
 	);
 	
-	add_translation("en",$english);
+	add_translation("ru",$russian);
 
 ?>
