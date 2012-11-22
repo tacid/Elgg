@@ -255,7 +255,7 @@
 	
 			'PRIVATE' => "Только себе",
 			'LOGGED_IN' => "Зарегистрированным",
-			'PUBLIC' => "Всем",
+			'PUBLIC' => "ПУБЛИЧНЫЙ",
 			'access:friends:label' => "Друзьям",
 			'access' => "Доступ",
 	
@@ -359,7 +359,7 @@
 	        'friends:river:delete' => "%s удалил(а) элемент, отображающий друзей.",
 	        'friends:river:add' => "%s добавил(а) в друзья пользователя ",
 			
-			'friendspicker:chararray' => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', //от с этим бида-бида
+			'friendspicker:chararray' => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', //от с этим бида-бида АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЫЭЮЯ
 			
 			'avatar' => 'Фото',
 			'avatar:create' => 'Сохранить изменения',
@@ -456,7 +456,7 @@
 			'users:searchtitle' => "Поиск пользователей: %s",
 			'groups:searchtitle' => "Поиск групп: %s",
 			'advancedsearchtitle' => "%s результатов совпадает с запросом '%s'",
-			'notfound' => "Ничего не найдено.",
+			'notfound' => "Ничего не найдено",
 			'next' => "Туды",
 			'previous' => "Сюды",
 	

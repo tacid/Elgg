@@ -93,7 +93,7 @@ $russian = array(
 	 * Error messages
 	 */
 
-		'file:none' => "Файлов нет.",
+		'file:none' => "---",
 		'file:uploadfailed' => "Простите, файл не сохранен.",
 		'file:downloadfailed' => "Простите, файл сейчас недоступен.",
 		'file:deletefailed' => "Простите, файл не удален.",

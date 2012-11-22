@@ -32,7 +32,7 @@ $russian = array(
 	'item:object:page' => 'Страницы',
 	'pages:nogroup' => 'В группе нет документов',
 	'pages:more' => 'Еще',
-	'pages:none' => 'Не создано ни одного документа',
+	'pages:none' => '---',
 
 	/**
 	* River

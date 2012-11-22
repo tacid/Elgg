@@ -61,10 +61,11 @@ $russian = array(
 	'groups:search:tags' => "Интересы",
 	'groups:search:title' => "Искать группу по интересам: '%s'",
 	'groups:search:none' => "Ничего не найдено!",
+	'groups:search_in_group' => "Поиск в этой группе",
 
 	'groups:activity' => "Активность группы",
 	'groups:enableactivity' => 'Включить активность группы',
-	'groups:activity:none' => "Пока нет активности",
+	'groups:activity:none' => "---",
 
 	'groups:notfound' => "Группа не найдена",
 	'groups:notfound:details' => "Запрашиваемая группа или не существует, или у Вас нет доступа к ней",
@@ -73,10 +74,10 @@ $russian = array(
 
 	'groups:invitations:none' => 'There are no oustanding invitations at this time.',
 
-	'item:object:groupforumtopic' => "Темы форума",
+	'item:object:groupforumtopic' => "Темы обсуждений",
 	'item:object:groups' => "Группы",
 
-	'groupforumtopic:new' => "Новое сообщение для обсуждения",
+	'groupforumtopic:new' => "Новая тема",
 
 	'groups:count' => "групп создано",
 	'groups:open' => "открытая группа",
@@ -85,7 +86,7 @@ $russian = array(
 	'groups:searchtag' => "Поиск групп по интересам",
 
 	'groups:more' => 'Еще группы',
-	'groups:none' => 'Нет групп',
+	'groups:none' => '---',
 
 
 	/*
@@ -111,9 +112,10 @@ $russian = array(
 	Group discussion
 	*/
 	'discussion' => 'Обсуждения',
-	'discussion:add' => 'Добавить сообщение для обсуждения',
+	'discussion:add' => 'Создать тему',
 	'discussion:latest' => 'Последние обсуждения',
-	'discussion:group' => 'Дискуссии группы',
+	'discussion:group' => 'Обсуждения группы',
+	'discussion:none' => '---',
 
 	'discussion:topic:created' => 'Создано.',
 	'discussion:topic:updated' => 'Обновлено.',
@@ -214,7 +216,7 @@ $russian = array(
 	*/
 
 	'river:create:group:default' => '%s создал(а) группу %s',
-	'river:join:group:default' => '%s вступил(а) %s',
+	'river:join:group:default' => '%s вступил(а) в группу %s',
 	'river:create:object:groupforumtopic' => '%s добавил(а) новое сообщение на форум %s',
 	'river:reply:object:groupforumtopic' => '%s ответил(а) на сообщение %s',
 	

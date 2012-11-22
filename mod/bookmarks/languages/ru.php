@@ -25,7 +25,7 @@ $russian = array(
 	'bookmarks:new' => "Новая закладка",
 	'bookmarks:via' => "через закладки",
 	'bookmarks:address' => "Адрес сайта",
-	'bookmarks:none' => 'Нет закладок',
+	'bookmarks:none' => '---',
 
 	'bookmarks:delete:confirm' => "Вы действительно хотите удалить закладку?",
 
