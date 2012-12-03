@@ -30,9 +30,9 @@ $extensions = elgg_view('extensions/channel');
 
 // allow caching as required by stupid MS products for https feeds.
 header('Pragma: public', true);
-header("Content-Type: text/xml");
+header('Content-Type: text/xml; charset="utf-8"');
 
-echo "<?xml version='1.0'?>";
+echo '<?xml version="1.0" encoding="UTF-8"?>';
 echo <<<END
 <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:georss="http://www.georss.org/georss" $namespaces>
 <channel>

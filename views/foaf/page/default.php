@@ -9,10 +9,10 @@
  * <foaf:weblog rdf:resource="<?php echo elgg_get_site_url(); ?>blog/<?php echo $owner->username; ?>" />
  */
 
-header("Content-Type: text/xml");
+header('Content-Type: text/xml; charset="utf-8"');
 // echo $vars['body'];
 
-echo "<?xml version='1.0'?>\n";
+echo '<?xml version="1.0" encoding="UTF-8"?>\n';
 
 if (!$owner = elgg_get_page_owner_entity()) {
 	if (!elgg_is_logged_in()) {
