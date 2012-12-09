@@ -175,7 +175,7 @@ p {
 	padding: 20px 20px;
 }
 .elgg-heading-site {
-	font-size: 1.8em;
+	font-size: 1em;
 	float: left;
 }
 .elgg-heading-site a {
