@@ -7,9 +7,9 @@
 
 // Set title
 if (empty($vars['title'])) {
-	$title = elgg_get_config('sitename');
+	$title = 'Рабочая площадка клуба ' . elgg_get_config('sitename');
 } else {
-	$title = $vars['title'] . ' : ' . elgg_get_config('sitename');
+	$title = $vars['title'] . ' : ' . 'Рабочая площадка клуба ' . elgg_get_config('sitename');
 }
 
 global $autofeed;

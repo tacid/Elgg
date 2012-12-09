@@ -9,7 +9,7 @@ $site_url = elgg_get_site_url();
 ?>
 
 <h1>
-	<a class="elgg-heading-site" href="<?php echo $site_url; ?>">
+	<a class="elgg-heading-site" href="<?php echo $site_url; ?>"><span style="font-size: x-large; font-style: normal;">Рабочая площадка клуба</span> 
 		<?php echo $site_name; ?>
 	</a>
 </h1>
