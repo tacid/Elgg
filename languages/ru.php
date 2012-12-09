@@ -241,7 +241,7 @@
 		 * User details
 		  */
 
-			'name' => "Имя и фамилия",
+			'name' => "Отображаемое имя (Внимание, доступно публично!)",
 			'email' => "Электронный адрес",
 			'username' => "Логин",
 			'loginusername' => "Логин или email",
@@ -506,8 +506,8 @@
 			'item:object:reported_content' => "Жалобы",
 	
 			'user:set:name' => "Настройки аккаунта",
-			'user:name:label' => "Имя и фамилия",
-			'user:name:success' => "Имя и фамилия изменены.",
+			'user:name:label' => "Отображаемое имя (Внимание, доступно публично!)",
+			'user:name:success' => "Отображаемое имя изменено.",
 			'user:name:fail' => "Не удается изменить имя в системе.",
 	
 			'user:set:password' => "Пароль аккаунта",
@@ -773,7 +773,7 @@
 			'usersettings:statistics:label:numentities' => "Ваши объекты",
 	
 			'usersettings:statistics:yourdetails' => "Ваши данные",
-			'usersettings:statistics:label:name' => "Полное имя и фамилия",
+			'usersettings:statistics:label:name' => "Отображаемое имя (Внимание, доступно публично!)",
 			'usersettings:statistics:label:email' => "Электронный адрес",
 			'usersettings:statistics:label:membersince' => "Регистрация",
 			'usersettings:statistics:label:lastlogin' => "Последний визит",
