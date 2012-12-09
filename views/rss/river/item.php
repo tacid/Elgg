@@ -23,7 +23,7 @@ if ($object) {
 
 $html = <<<__HTML
 <item>
-	<guid>$item->id</guid>
+	<guid>$url#$item->id</guid>
 	<pubDate>$timestamp</pubDate>
 	<link>$url</link>
 	<title><![CDATA[$title]]></title>
