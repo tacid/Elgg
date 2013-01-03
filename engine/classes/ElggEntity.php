@@ -1486,7 +1486,7 @@ abstract class ElggEntity extends ElggData implements
 		
 		$ret = $this->getDatabase()->updateData("UPDATE {$CONFIG->dbprefix}entities
 			set owner_guid='$owner_guid', access_id='$access_id',
-			container_guid='$container_guid', time_created='$time_created',
+			container_guid='$container_guid',
 			time_updated='$time' WHERE guid=$guid");
 
 		// TODO(evan): Move this to ElggObject?
