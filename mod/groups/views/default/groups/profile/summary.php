@@ -22,7 +22,7 @@ $owner = $group->getOwnerEntity();
 			<?php echo elgg_view_entity_icon($group, 'large', array('href' => '')); ?>
 		</div>
 		<div class="groups-stats">
-			<p>
+<!--			<p>
 				<b><?php echo elgg_echo("groups:owner"); ?>: </b>
 				<?php
 					echo elgg_view('output/url', array(
@@ -32,6 +32,7 @@ $owner = $group->getOwnerEntity();
 					));
 				?>
 			</p>
+--!>
 			<p>
 			<?php
 				echo elgg_echo('groups:members') . ": " . $group->getMembers(0, 0, TRUE);
