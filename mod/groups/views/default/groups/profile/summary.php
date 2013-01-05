@@ -32,7 +32,7 @@ $owner = $group->getOwnerEntity();
 					));
 				?>
 			</p>
---!>
+-->
 			<p>
 			<?php
 				echo elgg_echo('groups:members') . ": " . $group->getMembers(0, 0, TRUE);
