@@ -179,13 +179,17 @@ function discussion_handle_view_page($guid) {
 			'entity' => $topic,
 			'show_add_form' => true,
 		));
+	} elseif ($topic->access_id == 1) {
+		$content .= elgg_view('discussion/replies', array(
+			'entity' => $topic,
+			'show_add_form' => true,
+		));
 	} else {
 		$content .= elgg_view('discussion/replies', array(
 			'entity' => $topic,
 			'show_add_form' => false,
 		));
 	}
-
 	$params = array(
 		'content' => $content,
 		'title' => $topic->title,

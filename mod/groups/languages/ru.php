@@ -132,7 +132,7 @@ $russian = array(
 
 	'reply:this' => 'Ответить',
 
-	'group:replies' => 'Сообщений',
+	'group:replies' => 'Ответы',
 	'groups:forum:created' => 'Создал %s с %d комментариями',
 	'groups:forum:created:single' => 'Создал %s с %d ответами',
 	'groups:forum' => 'Форум группы',
@@ -178,7 +178,7 @@ $russian = array(
 	'groups:joined' => 'Вы вступили в группу!',
 	'groups:left' => 'Вы покинули группу',
 	'groups:notowner' => 'Простите, но вы не вледелец этой группы.',
-	'groups:notmember' => 'Извините, но вы не участний этой группы.',
+	'groups:notmember' => 'Извините, но вы не участник этой группы.',
 	'groups:alreadymember' => 'Вы уже состоите в этой группе!',
 	'groups:userinvited' => 'Пользователь приглашен.',
 	'groups:usernotinvited' => 'Простите, пользователь не может быть приглашен.',

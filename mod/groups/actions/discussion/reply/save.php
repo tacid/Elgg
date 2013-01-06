@@ -24,7 +24,7 @@ if (!$topic) {
 $user = elgg_get_logged_in_user_entity();
 
 $group = $topic->getContainerEntity();
-if (!$group->canWriteToContainer()) {
+if (!$group->canWriteToContainer() && $topic->access_id != 1) {
 	register_error(elgg_echo('groups:notmember'));
 	forward(REFERER);
 }
