@@ -1,41 +1,42 @@
+
 <?php
 /**
  * Likes English language file
  */
 
 $russian = array(
-	'likes:this' => 'liked this',
-	'likes:deleted' => 'Your like has been removed',
-	'likes:see' => 'See who liked this',
-	'likes:remove' => 'Unlike this',
-	'likes:notdeleted' => 'There was a problem removing your like',
-	'likes:likes' => 'You now like this item',
-	'likes:failure' => 'There was a problem liking this item',
-	'likes:alreadyliked' => 'You have already liked this item',
-	'likes:notfound' => 'The item you are trying to like cannot be found',
-	'likes:likethis' => 'Like this',
-	'likes:userlikedthis' => '%s like',
-	'likes:userslikedthis' => '%s likes',
-	'likes:river:annotate' => 'likes',
+	'likes:this' => 'Одобряю',
+	'likes:deleted' => 'Ваш отзыв удалён',
+	'likes:see' => 'Посмотреть кто это одобрил',
+	'likes:remove' => 'Не одобряю',
+	'likes:notdeleted' => 'Возникла ошибка при удалении отзыва',
+	'likes:likes' => 'Вы это одобрили',
+	'likes:failure' => 'Возникла ошибка при добавлении отзыва',
+	'likes:alreadyliked' => 'Вы уже одобрили это',
+	'likes:notfound' => 'Не найден объект, который вы хотите одобрить',
+	'likes:likethis' => 'Одобряю это',
+	'likes:userlikedthis' => 'Одобрений: %s',
+	'likes:userslikedthis' => 'Одобрений: %s',
+	'likes:river:annotate' => 'Одобрений',
 
-	'river:likes' => 'likes %s %s',
+	'river:likes' => '%s одобрил(а) %s',
 
 	// notifications. yikes.
-	'likes:notifications:subject' => '%s likes your post "%s"',
+	'likes:notifications:subject' => '%s одобряет ваше сообщение "%s"',
 	'likes:notifications:body' =>
-'Hi %1$s,
+'Привет %1$s,
 
-%2$s likes your post "%3$s" on %4$s!
+%2$s одобрил(а) ваше сообщение "%3$s" в %4$s!
 
-See your original post here:
+Смотрите исходное сообщение здесь:
 
 %5$s
 
-or view %2$s\'s profile here:
+или смотрите профиль %2$s\'s здесь:
 
 %6$s
 
-Thanks,
+Спасибо,
 %4$s
 ',
 	
