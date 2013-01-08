@@ -457,8 +457,8 @@
 			'groups:searchtitle' => "Поиск групп: %s",
 			'advancedsearchtitle' => "%s результатов совпадает с запросом '%s'",
 			'notfound' => "Ничего не найдено",
-			'next' => "Туды",
-			'previous' => "Сюды",
+			'next' => "Вперёд",
+			'previous' => "Назад",
 	
 			'viewtype:change' => "Изменить вид вывода",
 			'viewtype:list' => "Список",
