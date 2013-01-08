@@ -11,6 +11,7 @@
 }
 .message.unread a {
 	color: #d40005;
+	font-weight: bold;
 }
 .messages-buttonbank {
 	text-align: right;
