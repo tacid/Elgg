@@ -70,7 +70,7 @@ $dbcalls = 0;
 function elgg_get_database() {
 	global $CONFIG;
 	if (!isset($CONFIG->databaseObj)) {
-		$CONFIG->databaseObj = new ElggDatabase();	
+		@$CONFIG->databaseObj = new ElggDatabase();
 	}
 	
 	return $CONFIG->databaseObj;
