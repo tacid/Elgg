@@ -2,6 +2,7 @@
 /engine/settings.php
 /.htaccess
 /mod/*
+/mod/chat_pfc/vendors/phpfreechat/data/private/chat
 
 # don't ignore bundled plugins
 !/mod/blog/
