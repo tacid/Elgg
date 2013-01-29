@@ -612,7 +612,7 @@ function elgg_register_event_handler($event, $object_type, $callback, $priority 
 	global $CONFIG;
 
 	if (empty($event) || empty($object_type)) {
-		return FALSE;
+		return false;
 	}
 
 	if (!isset($CONFIG->events)) {
@@ -625,8 +625,8 @@ function elgg_register_event_handler($event, $object_type, $callback, $priority 
 		$CONFIG->events[$event][$object_type] = array();
 	}
 
-	if (!is_callable($callback)) {
-		return FALSE;
+	if (!is_callable($callback, true)) {
+		return false;
 	}
 
 	$priority = max((int) $priority, 0);
@@ -636,7 +636,7 @@ function elgg_register_event_handler($event, $object_type, $callback, $priority 
 	}
 	$CONFIG->events[$event][$object_type][$priority] = $callback;
 	ksort($CONFIG->events[$event][$object_type]);
-	return TRUE;
+	return true;
 }
 
 /**
@@ -651,9 +651,12 @@ function elgg_register_event_handler($event, $object_type, $callback, $priority 
  */
 function elgg_unregister_event_handler($event, $object_type, $callback) {
 	global $CONFIG;
-	foreach ($CONFIG->events[$event][$object_type] as $key => $event_callback) {
-		if ($event_callback == $callback) {
-			unset($CONFIG->events[$event][$object_type][$key]);
+
+	if (isset($CONFIG->events[$event]) && isset($CONFIG->events[$event][$object_type])) {
+		foreach ($CONFIG->events[$event][$object_type] as $key => $event_callback) {
+			if ($event_callback == $callback) {
+				unset($CONFIG->events[$event][$object_type][$key]);
+			}
 		}
 	}
 }
@@ -711,14 +714,14 @@ function elgg_trigger_event($event, $object_type, $object = null) {
 	foreach ($events as $callback_list) {
 		if (is_array($callback_list)) {
 			foreach ($callback_list as $callback) {
-				if (call_user_func_array($callback, $args) === FALSE) {
-					return FALSE;
+				if (is_callable($callback) && (call_user_func_array($callback, $args) === false)) {
+					return false;
 				}
 			}
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
 /**
@@ -788,34 +791,7 @@ function elgg_trigger_event($event, $object_type, $object = null) {
  * @since 1.8.0
  */
 function elgg_register_plugin_hook_handler($hook, $type, $callback, $priority = 500) {
-	global $CONFIG;
-
-	if (empty($hook) || empty($type)) {
-		return FALSE;
-	}
-
-	if (!isset($CONFIG->hooks)) {
-		$CONFIG->hooks = array();
-	}
-	if (!isset($CONFIG->hooks[$hook])) {
-		$CONFIG->hooks[$hook] = array();
-	}
-	if (!isset($CONFIG->hooks[$hook][$type])) {
-		$CONFIG->hooks[$hook][$type] = array();
-	}
-
-	if (!is_callable($callback)) {
-		return FALSE;
-	}
-
-	$priority = max((int) $priority, 0);
-
-	while (isset($CONFIG->hooks[$hook][$type][$priority])) {
-		$priority++;
-	}
-	$CONFIG->hooks[$hook][$type][$priority] = $callback;
-	ksort($CONFIG->hooks[$hook][$type]);
-	return TRUE;
+	return ElggPluginHookService::getInstance()->registerHandler($hook, $type, $callback, $priority);
 }
 
 /**
@@ -829,12 +805,7 @@ function elgg_register_plugin_hook_handler($hook, $type, $callback, $priority = 
  * @since 1.8.0
  */
 function elgg_unregister_plugin_hook_handler($hook, $entity_type, $callback) {
-	global $CONFIG;
-	foreach ($CONFIG->hooks[$hook][$entity_type] as $key => $hook_callback) {
-		if ($hook_callback == $callback) {
-			unset($CONFIG->hooks[$hook][$entity_type][$key]);
-		}
-	}
+	ElggPluginHookService::getInstance()->unregisterHandler($hook, $entity_type, $callback);
 }
 
 /**
@@ -886,41 +857,7 @@ function elgg_unregister_plugin_hook_handler($hook, $entity_type, $callback) {
  * @since 1.8.0
  */
 function elgg_trigger_plugin_hook($hook, $type, $params = null, $returnvalue = null) {
-	global $CONFIG;
-
-	$hooks = array();
-	if (isset($CONFIG->hooks[$hook][$type])) {
-		if ($hook != 'all' && $type != 'all') {
-			$hooks[] = $CONFIG->hooks[$hook][$type];
-		}
-	}
-	if (isset($CONFIG->hooks['all'][$type])) {
-		if ($type != 'all') {
-			$hooks[] = $CONFIG->hooks['all'][$type];
-		}
-	}
-	if (isset($CONFIG->hooks[$hook]['all'])) {
-		if ($hook != 'all') {
-			$hooks[] = $CONFIG->hooks[$hook]['all'];
-		}
-	}
-	if (isset($CONFIG->hooks['all']['all'])) {
-		$hooks[] = $CONFIG->hooks['all']['all'];
-	}
-
-	foreach ($hooks as $callback_list) {
-		if (is_array($callback_list)) {
-			foreach ($callback_list as $hookcallback) {
-				$args = array($hook, $type, $returnvalue, $params);
-				$temp_return_value = call_user_func_array($hookcallback, $args);
-				if (!is_null($temp_return_value)) {
-					$returnvalue = $temp_return_value;
-				}
-			}
-		}
-	}
-
-	return $returnvalue;
+	return ElggPluginHookService::getInstance()->trigger($hook, $type, $params, $returnvalue);
 }
 
 /**
@@ -1011,7 +948,11 @@ function _elgg_php_error_handler($errno, $errmsg, $filename, $linenum, $vars) {
 		case E_WARNING :
 		case E_USER_WARNING :
 		case E_RECOVERABLE_ERROR: // (e.g. type hint violation)
-			error_log("PHP WARNING: $error");
+			
+			// check if the error wasn't suppressed by the error control operator (@)
+			if (error_reporting()) {
+				error_log("PHP WARNING: $error");
+			}
 			break;
 
 		default:
@@ -1023,6 +964,7 @@ function _elgg_php_error_handler($errno, $errmsg, $filename, $linenum, $vars) {
 
 	return true;
 }
+
 
 /**
  * Display or log a message.
@@ -1044,38 +986,7 @@ function _elgg_php_error_handler($errno, $errmsg, $filename, $linenum, $vars) {
  * make things easier.
  */
 function elgg_log($message, $level = 'NOTICE') {
-	global $CONFIG;
-
-	// only log when debugging is enabled
-	if (isset($CONFIG->debug)) {
-		// debug to screen or log?
-		$to_screen = !($CONFIG->debug == 'NOTICE');
-
-		switch ($level) {
-			case 'ERROR':
-				// always report
-				elgg_dump("$level: $message", $to_screen, $level);
-				break;
-			case 'WARNING':
-			case 'DEBUG':
-				// report except if user wants only errors
-				if ($CONFIG->debug != 'ERROR') {
-					elgg_dump("$level: $message", $to_screen, $level);
-				}
-				break;
-			case 'NOTICE':
-			default:
-				// only report when lowest level is desired
-				if ($CONFIG->debug == 'NOTICE') {
-					elgg_dump("$level: $message", FALSE, $level);
-				}
-				break;
-		}
-
-		return TRUE;
-	}
-
-	return FALSE;
+    return ElggLogger::getInstance()->log($message, $level);
 }
 
 /**
@@ -1091,36 +1002,10 @@ function elgg_log($message, $level = 'NOTICE') {
  * @param bool   $to_screen Display to screen?
  * @param string $level     The debug level
  *
- * @return void
  * @since 1.7.0
  */
 function elgg_dump($value, $to_screen = TRUE, $level = 'NOTICE') {
-	global $CONFIG;
-
-	// plugin can return false to stop the default logging method
-	$params = array(
-		'level' => $level,
-		'msg' => $value,
-		'to_screen' => $to_screen,
-	);
-	if (!elgg_trigger_plugin_hook('debug', 'log', $params, true)) {
-		return;
-	}
-
-	// Do not want to write to screen before page creation has started.
-	// This is not fool-proof but probably fixes 95% of the cases when logging
-	// results in data sent to the browser before the page is begun.
-	if (!isset($CONFIG->pagesetupdone)) {
-		$to_screen = FALSE;
-	}
-
-	if ($to_screen == TRUE) {
-		echo '<pre>';
-		print_r($value);
-		echo '</pre>';
-	} else {
-		error_log(print_r($value, TRUE));
-	}
+	ElggLogger::getInstance()->dump($value, $to_screen, $level);
 }
 
 /**
@@ -1820,7 +1705,7 @@ function elgg_cacheable_view_page_handler($page, $type) {
 		header("Content-type: $content_type");
 
 		// @todo should js be cached when simple cache turned off
-		//header('Expires: ' . date('r', time() + 864000));
+		//header('Expires: ' . gmdate('D, d M Y H:i:s \G\M\T', strtotime("+10 days")), true);
 		//header("Pragma: public");
 		//header("Cache-Control: public");
 		//header("Content-Length: " . strlen($return));
@@ -1991,6 +1876,7 @@ function elgg_walled_garden_index($hook, $type, $value, $params) {
 	// return true to prevent other plugins from adding a front page
 	return true;
 }
+
 
 /**
  * Serve walled garden sections

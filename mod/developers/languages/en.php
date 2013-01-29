@@ -52,6 +52,7 @@ return array(
 	'theme_preview:modules' => 'Modules',
 	'theme_preview:navigation' => 'Navigation',
 	'theme_preview:typography' => 'Typography',
+	'theme_preview:miscellaneous' => 'Miscellaneous',
 
 	// status messages
 	'developers:settings:success' => 'Settings saved',
