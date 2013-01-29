@@ -3,7 +3,6 @@
 /.htaccess
 /mod/*
 #mod chat_pfc
-/mod/chat_pfc/vendors/phpfreechat/data/public/themes/
 /mod/chat_pfc/vendors/phpfreechat/data/private/chat/
 /mod/chat_pfc/vendors/phpfreechat/data/private/logs/
 /mod/chat_pfc/vendors/phpfreechat/data/private/cache/
