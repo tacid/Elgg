@@ -5,9 +5,15 @@
  * @package ElggReportedContent
  */
 
-$list = elgg_list_entities(array('types' => 'object', 'subtypes' => 'reported_content'));
-if (!$list) {
-	$list = '<p class="mtm">' . elgg_echo('reportedcontent:none') . '</p>';
-}
+elgg_require_js('elgg/reportedcontent');
 
-echo $list;
+echo elgg_list_entities_from_metadata([
+	'type' => 'object',
+	'subtype' => 'reported_content',
+	'order_by_metadata' => [
+		'name' => 'state',
+		'direction' => 'ASC',
+		'as' => 'text',
+	],
+	'no_results' => elgg_echo('reportedcontent:none'),
+]);

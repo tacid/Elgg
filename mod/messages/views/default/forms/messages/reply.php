@@ -12,8 +12,13 @@ if (strncmp($reply_title, "RE:", 3) != 0) {
 }
 
 echo elgg_view('input/hidden', array(
-	'name' => 'recipient_guid',
+	'name' => 'recipients[]',
 	'value' => $vars['message']->fromId,
+));
+
+echo elgg_view('input/hidden', array(
+	'name' => 'original_guid',
+	'value' => $vars['message']->guid,
 ));
 ?>
 
@@ -34,5 +39,5 @@ echo elgg_view('input/hidden', array(
 	?>
 </div>
 <div class="elgg-foot">
-	<?php echo elgg_view('input/submit', array('value' => elgg_echo('messages:send'))); ?>
+	<?php echo elgg_view('input/submit', array('value' => elgg_echo('send'))); ?>
 </div>

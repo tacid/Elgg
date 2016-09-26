@@ -1,7 +1,7 @@
 <?php
 /**
  * View a wire post
- * 
+ *
  * @uses $vars['entity']
  */
 
@@ -31,22 +31,22 @@ $owner_link = elgg_view('output/url', array(
 $author_text = elgg_echo('byline', array($owner_link));
 $date = elgg_view_friendly_time($post->time_created);
 
-$metadata = elgg_view_menu('entity', array(
-	'entity' => $post,
-	'handler' => 'thewire',
-	'sort_by' => 'priority',
-	'class' => 'elgg-menu-hz',
-));
-
 $subtitle = "$author_text $date";
 
-// do not show the metadata and controls in widget view
-if (elgg_in_context('widgets')) {
-	$metadata = '';
+$metadata = '';
+if (!elgg_in_context('widgets')) {
+	// only show entity menu outside of widgets
+	$metadata = elgg_view_menu('entity', array(
+		'entity' => $post,
+		'handler' => 'thewire',
+		'sort_by' => 'priority',
+		'class' => 'elgg-menu-hz',
+	));
 }
 
 $params = array(
 	'entity' => $post,
+	'title' => false,
 	'metadata' => $metadata,
 	'subtitle' => $subtitle,
 	'content' => thewire_filter($post->description),
@@ -55,7 +55,7 @@ $params = array(
 $params = $params + $vars;
 $list_body = elgg_view('object/elements/summary', $params);
 
-echo elgg_view_image_block($owner_icon, $list_body);
+echo elgg_view_image_block($owner_icon, $list_body, array('class' => 'thewire-post'));
 
 if ($post->reply) {
 	echo "<div class=\"thewire-parent hidden\" id=\"thewire-previous-{$post->guid}\">";

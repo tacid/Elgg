@@ -5,9 +5,13 @@
  * @package Elgg
  * @subpackage Core
  *
- * @uses $vars['value'] Source of the page
- *
+ * @uses $vars['src'] Source URL of the page
  */
-?>
-<iframe src="<?php echo $vars['value']; ?>">
-</iframe>
+
+$src = elgg_extract('src', $vars);
+
+$src = elgg_normalize_url($src);
+$vars['src'] = elgg_format_url($src);
+
+$attributes = elgg_format_attributes($vars);
+echo "<iframe $attributes></iframe>";

@@ -1,33 +1,30 @@
 <?php
 
-global $NOTIFICATION_HANDLERS;
+$NOTIFICATION_HANDLERS = _elgg_services()->notifications->getMethodsAsDeprecatedGlobal();
 
-?> 
+?>
 <?php //@todo JS 1.8: no ?>
-<script type="text/javascript">
+<script>
+require(['jquery'], function($) {
+	$(function () {
+		<?php
+		foreach($NOTIFICATION_HANDLERS as $method => $foo) {
+		?>
+		$('input[type=checkbox]:checked').parent("a.<?php echo $method; ?>toggleOff").each(function(){
+			$(this).removeClass('<?php echo $method; ?>toggleOff').addClass('<?php echo $method; ?>toggleOn');
+		});
 
-$(document).ready(function () {
-<?php 
-foreach($NOTIFICATION_HANDLERS as $method => $foo) {
-?>
-	$('input[type=checkbox]:checked').parent("a.<?php echo $method; ?>toggleOff").each(function(){
-		$(this).removeClass('<?php echo $method; ?>toggleOff').addClass('<?php echo $method; ?>toggleOn');
+		<?php
+		}
+		?>
 	});
-	
-<?php
-}
-?>
-
 });
-
-	clickflag = 0;
-
-<?php 
+<?php
 foreach($NOTIFICATION_HANDLERS as $method => $foo) {
 ?>
 function adjust<?php echo $method; ?>(linkId) {
 	var obj = $(this).prev("a");
-	
+
 	if (obj.className == "<?php echo $method; ?>toggleOff") {
 		obj.className = "<?php echo $method; ?>toggleOn";
 	} else {
@@ -40,10 +37,10 @@ function adjust<?php echo $method; ?>_alt(linkId) {
 	
 	if (obj.className == "<?php echo $method; ?>toggleOff") {
 		obj.className = "<?php echo $method; ?>toggleOn";
-		$('#' + linkId).children("input[type='checkbox']").attr('checked', true);
+		$('#' + linkId).children("input[type='checkbox']").prop('checked', true);
 	} else {
 		obj.className = "<?php echo $method; ?>toggleOff";
-		$('#' + linkId).children("input[type='checkbox']").attr('checked', false);
+		$('#' + linkId).children("input[type='checkbox']").prop('checked', false);
 	}
 	return false;
 }

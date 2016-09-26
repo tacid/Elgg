@@ -9,7 +9,6 @@ $item = $vars['item'];
 
 $subject = $item->getSubjectEntity();
 $object = $item->getObjectEntity();
-$target = $object->getContainerEntity();
 
 $subject_link = elgg_view('output/url', array(
 	'href' => $subject->getURL(),
@@ -18,9 +17,10 @@ $subject_link = elgg_view('output/url', array(
 	'is_trusted' => true,
 ));
 
+$object_text = $object->title ? $object->title : $object->name;
 $object_link = elgg_view('output/url', array(
 	'href' => $object->getURL(),
-	'text' => $object->title ? $object->title : $object->name,
+	'text' => elgg_get_excerpt($object_text, 100),
 	'class' => 'elgg-river-object',
 	'is_trusted' => true,
 ));
@@ -28,17 +28,6 @@ $object_link = elgg_view('output/url', array(
 $action = $item->action_type;
 $type = $item->type;
 $subtype = $item->subtype ? $item->subtype : 'default';
-
-$container = $object->getContainerEntity();
-if ($container instanceof ElggGroup) {
-	$params = array(
-		'href' => $container->getURL(),
-		'text' => $container->name,
-		'is_trusted' => true,
-	);
-	$group_link = elgg_view('output/url', $params);
-	$group_string = elgg_echo('river:ingroup', array($group_link));
-}
 
 // check summary translation keys.
 // will use the $type:$subtype if that's defined, otherwise just uses $type:default

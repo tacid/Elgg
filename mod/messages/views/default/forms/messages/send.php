@@ -3,27 +3,24 @@
  * Compose message form
  *
  * @package ElggMessages
- * @uses $vars['friends']
+ * @uses $vars['$recipient_username']
+ * @uses $vars['subject']
+ * @uses $vars['body']
  */
 
-$recipient_guid = elgg_extract('recipient_guid', $vars, 0);
+$recipients = elgg_extract('recipients', $vars);
 $subject = elgg_extract('subject', $vars, '');
 $body = elgg_extract('body', $vars, '');
 
-$recipient = get_entity($recipient_guid);
-if (elgg_instanceof($recipient, 'user')) {
-	$recipient_username = $recipient->username;
-}
-
-$recipient_autocomplete = elgg_view('input/autocomplete', array(
-	'name' => 'recipient_username',
-	'value' => $recipient_username,
-	'match_on' => array('users'),
+$recipient_autocomplete = elgg_view('input/userpicker', array(
+	'name' => 'recipients',
+	'values' => $recipients,
+	'limit' => 1,
 ));
 
 ?>
 <div>
-	<label><?php echo elgg_echo("messages:to"); ?>: </label>
+	<label><?php echo elgg_echo("email:to"); ?>: </label>
 	<?php echo $recipient_autocomplete; ?>
 	<span class="elgg-text-help"><?php echo elgg_echo("messages:to:help"); ?></span>
 	
@@ -45,5 +42,5 @@ $recipient_autocomplete = elgg_view('input/autocomplete', array(
 	?>
 </div>
 <div class="elgg-foot">
-	<?php echo elgg_view('input/submit', array('value' => elgg_echo('messages:send'))); ?>
+	<?php echo elgg_view('input/submit', array('value' => elgg_echo('send'))); ?>
 </div>

@@ -13,29 +13,17 @@ if (!$file) {
 }
 
 $owner = $file->getOwnerEntity();
-$container = $file->getContainerEntity();
 $categories = elgg_view('output/categories', $vars);
-$excerpt = elgg_get_excerpt($file->description);
-$mime = $file->mimetype;
-$base_type = substr($mime, 0, strpos($mime,'/'));
 
-$owner_link = elgg_view('output/url', array(
-	'href' => "file/owner/$owner->username",
-	'text' => $owner->name,
-	'is_trusted' => true,
-));
-$author_text = elgg_echo('byline', array($owner_link));
-
-$file_icon = elgg_view_entity_icon($file, 'small');
-
-$date = elgg_view_friendly_time($file->time_created);
+$vars['owner_url'] = "file/owner/$owner->username";
+$by_line = elgg_view('page/elements/by_line', $vars);
 
 $comments_count = $file->countComments();
 //only display if there are commments
 if ($comments_count != 0) {
 	$text = elgg_echo("comments") . " ($comments_count)";
 	$comments_link = elgg_view('output/url', array(
-		'href' => $file->getURL() . '#file-comments',
+		'href' => $file->getURL() . '#comments',
 		'text' => $text,
 		'is_trusted' => true,
 	));
@@ -43,21 +31,22 @@ if ($comments_count != 0) {
 	$comments_link = '';
 }
 
-$metadata = elgg_view_menu('entity', array(
-	'entity' => $vars['entity'],
-	'handler' => 'file',
-	'sort_by' => 'priority',
-	'class' => 'elgg-menu-hz',
-));
+$subtitle = "$by_line $comments_link $categories";
 
-$subtitle = "$author_text $date $comments_link $categories";
-
-// do not show the metadata and controls in widget view
-if (elgg_in_context('widgets')) {
-	$metadata = '';
+$metadata = '';
+if (!elgg_in_context('widgets') && !elgg_in_context('gallery')) {
+	// only show entity menu outside of widgets and gallery view
+	$metadata = elgg_view_menu('entity', array(
+		'entity' => $vars['entity'],
+		'handler' => 'file',
+		'sort_by' => 'priority',
+		'class' => 'elgg-menu-hz',
+	));
 }
 
 if ($full && !elgg_in_context('gallery')) {
+	$mime = $file->getMimeType();
+	$base_type = substr($mime, 0, strpos($mime,'/'));
 
 	$extra = '';
 	if (elgg_view_exists("file/specialcontent/$mime")) {
@@ -78,6 +67,8 @@ if ($full && !elgg_in_context('gallery')) {
 	$text = elgg_view('output/longtext', array('value' => $file->description));
 	$body = "$text $extra";
 
+	$file_icon = elgg_view_entity_icon($file, 'small', array('href' => false));
+
 	echo elgg_view('object/elements/full', array(
 		'entity' => $file,
 		'icon' => $file_icon,
@@ -93,6 +84,9 @@ if ($full && !elgg_in_context('gallery')) {
 	echo '</div>';
 } else {
 	// brief view
+	$excerpt = elgg_get_excerpt($file->description);
+
+	$file_icon = elgg_view_entity_icon($file, 'small');
 
 	$params = array(
 		'entity' => $file,

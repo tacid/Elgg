@@ -1,55 +1,54 @@
 <?php
+
 /**
  * The parent class for all Elgg Entities.
  *
- * An ElggEntity is one of the basic data models in Elgg.  It is the primary
- * means of storing and retrieving data from the database.  An ElggEntity
+ * An \ElggEntity is one of the basic data models in Elgg.  It is the primary
+ * means of storing and retrieving data from the database.  An \ElggEntity
  * represents one row of the entities table.
  *
- * The ElggEntity class handles CRUD operations for the entities table.
- * ElggEntity should always be extended by another class to handle CRUD
+ * The \ElggEntity class handles CRUD operations for the entities table.
+ * \ElggEntity should always be extended by another class to handle CRUD
  * operations on the type-specific table.
  *
- * ElggEntity uses magic methods for get and set, so any property that isn't
+ * \ElggEntity uses magic methods for get and set, so any property that isn't
  * declared will be assumed to be metadata and written to the database
  * as metadata on the object.  All children classes must declare which
  * properties are columns of the type table or they will be assumed
- * to be metadata.  See ElggObject::initialiseAttributes() for examples.
+ * to be metadata.  See \ElggObject::initializeAttributes() for examples.
  *
- * Core supports 4 types of entities: ElggObject, ElggUser, ElggGroup, and
- * ElggSite.
+ * Core supports 4 types of entities: \ElggObject, \ElggUser, \ElggGroup, and
+ * \ElggSite.
  *
- * @tip Most plugin authors will want to extend the ElggObject class
- * instead of this class.
+ * @tip Plugin authors will want to extend the \ElggObject class, not this class.
  *
  * @package    Elgg.Core
  * @subpackage DataModel.Entities
- * 
- * @property string $type           object, user, group, or site (read-only after save)
- * @property string $subtype        Further clarifies the nature of the entity (read-only after save)
- * @property int    $guid           The unique identifier for this entity (read only)
- * @property int    $owner_guid     The GUID of the owner of this entity (usually the creator)
- * @property int    $container_guid The GUID of the entity containing this entity
- * @property int    $site_guid      The GUID of the website this entity is associated with
- * @property int    $access_id      Specifies the visibility level of this entity
- * @property int    $time_created   A UNIX timestamp of when the entity was created
- * @property int    $time_updated   A UNIX timestamp of when the entity was last updated (automatically updated on save)
+ *
+ * @property       string $type           object, user, group, or site (read-only after save)
+ * @property-write string $subtype        Further clarifies the nature of the entity (this should not be read)
+ * @property       int    $guid           The unique identifier for this entity (read only)
+ * @property       int    $owner_guid     The GUID of the owner of this entity (usually the creator)
+ * @property       int    $container_guid The GUID of the entity containing this entity
+ * @property       int    $site_guid      The GUID of the website this entity is associated with
+ * @property       int    $access_id      Specifies the visibility level of this entity
+ * @property       int    $time_created   A UNIX timestamp of when the entity was created
+ * @property       int    $time_updated   A UNIX timestamp of when the entity was last updated (automatically updated on save)
+ * @property       string $enabled        Is this entity enabled ('yes' or 'no')
+ *
+ * Metadata (the above are attributes)
+ * @property       string $location       A location of the entity
  */
-abstract class ElggEntity extends ElggData implements
-	Notable,    // Calendar interface
-	Locatable,  // Geocoding interface
-	Importable // Allow import of data
+abstract class ElggEntity extends \ElggData implements
+	Locatable, // Geocoding interface
+	Importable, // Allow import of data (deprecated 1.9)
+	\Elgg\EntityIcon // Icon interface
 {
 
 	/**
 	 * If set, overrides the value of getURL()
 	 */
 	protected $url_override;
-
-	/**
-	 * Icon override, overrides the value of getIcon().
-	 */
-	protected $icon_override;
 
 	/**
 	 * Holds metadata until entity is saved.  Once the entity is saved,
@@ -76,6 +75,11 @@ abstract class ElggEntity extends ElggData implements
 	protected $volatile = array();
 
 	/**
+	 * Holds the original (persisted) attribute values that have been changed but not yet saved.
+	 */
+	protected $orig_attributes = array();
+	
+	/**
 	 * Initialize the attributes array.
 	 *
 	 * This is vital to distinguish between metadata and base parameters.
@@ -85,37 +89,18 @@ abstract class ElggEntity extends ElggData implements
 	protected function initializeAttributes() {
 		parent::initializeAttributes();
 
-		$this->attributes['guid'] = NULL;
-		$this->attributes['type'] = NULL;
-		$this->attributes['subtype'] = NULL;
+		$this->attributes['guid'] = null;
+		$this->attributes['type'] = null;
+		$this->attributes['subtype'] = null;
 
-		$this->attributes['owner_guid'] = elgg_get_logged_in_user_guid();
-		$this->attributes['container_guid'] = elgg_get_logged_in_user_guid();
+		$this->attributes['owner_guid'] = _elgg_services()->session->getLoggedInUserGuid();
+		$this->attributes['container_guid'] = _elgg_services()->session->getLoggedInUserGuid();
 
-		$this->attributes['site_guid'] = NULL;
+		$this->attributes['site_guid'] = null;
 		$this->attributes['access_id'] = ACCESS_PRIVATE;
-		$this->attributes['time_created'] = NULL;
-		$this->attributes['time_updated'] = NULL;
-		$this->attributes['last_action'] = NULL;
+		$this->attributes['time_updated'] = null;
+		$this->attributes['last_action'] = null;
 		$this->attributes['enabled'] = "yes";
-
-		// There now follows a bit of a hack
-		/* Problem: To speed things up, some objects are split over several tables,
-		 * this means that it requires n number of database reads to fully populate
-		 * an entity. This causes problems for caching and create events
-		 * since it is not possible to tell whether a subclassed entity is complete.
-		 *
-		 * Solution: We have two counters, one 'tables_split' which tells whatever is
-		 * interested how many tables are going to need to be searched in order to fully
-		 * populate this object, and 'tables_loaded' which is how many have been
-		 * loaded thus far.
-		 *
-		 * If the two are the same then this object is complete.
-		 *
-		 * Use: isFullyLoaded() to check
-		 */
-		$this->attributes['tables_split'] = 1;
-		$this->attributes['tables_loaded'] = 0;
 	}
 
 	/**
@@ -134,7 +119,7 @@ abstract class ElggEntity extends ElggData implements
 	public function __clone() {
 		$orig_entity = get_entity($this->guid);
 		if (!$orig_entity) {
-			elgg_log("Failed to clone entity with GUID $this->guid", "ERROR");
+			_elgg_services()->logger->error("Failed to clone entity with GUID $this->guid");
 			return;
 		}
 
@@ -160,91 +145,161 @@ abstract class ElggEntity extends ElggData implements
 
 			// move the metadata over
 			foreach ($metadata_names as $name) {
-				$this->set($name, $orig_entity->$name);
+				$this->__set($name, $orig_entity->$name);
 			}
 		}
 	}
 
 	/**
-	 * Return the value of a property.
+	 * Set an attribute or metadata value for this entity
 	 *
-	 * If $name is defined in $this->attributes that value is returned, otherwise it will
-	 * pull from the entity's metadata.
+	 * Anything that is not an attribute is saved as metadata.
 	 *
-	 * Q: Why are we not using __get overload here?
-	 * A: Because overload operators cause problems during subclassing, so we put the code here and
-	 * create overloads in subclasses.
+	 * @warning Metadata set this way will inherit the entity's owner and
+	 * access ID. If you want more control over metadata, use \ElggEntity::setMetadata()
 	 *
-	 * @todo What problems are these?
-	 *
-	 *
-	 * @param string $name Name
-	 *
-	 * @return mixed Returns the value of a given value, or null.
+	 * @param string $name  Name of the attribute or metadata
+	 * @param mixed  $value The value to be set
+	 * @return void
+	 * @see \ElggEntity::setMetadata()
 	 */
-	public function get($name) {
-		// See if its in our base attributes
-		if (array_key_exists($name, $this->attributes)) {
-			return $this->attributes[$name];
+	public function __set($name, $value) {
+		if ($this->$name === $value) {
+			// quick return if value is not changing
+			return;
 		}
 
-		// No, so see if its in the meta data for this entity
-		$meta = $this->getMetaData($name);
-
-		// getMetaData returns NULL if $name is not found
-		return $meta;
-	}
-
-	/**
-	 * Sets the value of a property.
-	 *
-	 * If $name is defined in $this->attributes that value is set, otherwise it is
-	 * saved as metadata.
-	 *
-	 * @warning Metadata set this way will inherit the entity's owner and access ID. If you want
-	 * to set metadata with a different owner, use create_metadata().
-	 *
-	 * @warning It is important that your class populates $this->attributes with keys
-	 * for all base attributes, anything not in their gets set as METADATA.
-	 *
-	 * Q: Why are we not using __set overload here?
-	 * A: Because overload operators cause problems during subclassing, so we put the code here and
-	 * create overloads in subclasses.
-	 *
-	 * @todo What problems?
-	 *
-	 * @param string $name  Name
-	 * @param mixed  $value Value
-	 *
-	 * @return bool
-	 */
-	public function set($name, $value) {
 		if (array_key_exists($name, $this->attributes)) {
+			// if an attribute is 1 (integer) and it's set to "1" (string), don't consider that a change.
+			if (is_int($this->attributes[$name])
+					&& is_string($value)
+					&& ((string)$this->attributes[$name] === $value)) {
+				return;
+			}
+
+			// Due to https://github.com/Elgg/Elgg/pull/5456#issuecomment-17785173, certain attributes
+			// will store empty strings as null in the DB. In the somewhat common case that we're re-setting
+			// the value to empty string, don't consider this a change.
+			if (in_array($name, ['title', 'name', 'description'])
+					&& $this->attributes[$name] === null
+					&& $value === "") {
+				return;
+			}
+
+			// keep original values
+			if ($this->guid && !array_key_exists($name, $this->orig_attributes)) {
+				$this->orig_attributes[$name] = $this->attributes[$name];
+			}
+
 			// Certain properties should not be manually changed!
 			switch ($name) {
 				case 'guid':
 				case 'time_updated':
 				case 'last_action':
-					return FALSE;
+					return;
+					break;
+				case 'access_id':
+				case 'owner_guid':
+				case 'container_guid':
+					if ($value !== null) {
+						$this->attributes[$name] = (int)$value;
+					} else {
+						$this->attributes[$name] = null;
+					}
 					break;
 				default:
 					$this->attributes[$name] = $value;
 					break;
 			}
-		} else {
-			return $this->setMetaData($name, $value);
+			return;
 		}
 
-		return TRUE;
+		if ($name === 'tables_split' || $name === 'tables_loaded') {
+			elgg_deprecated_notice("Do not read/write ->tables_split or ->tables_loaded.", "2.1");
+			return;
+		}
+
+		$this->setMetadata($name, $value);
 	}
-	
+
 	/**
+	 * Sets the value of an attribute or metadata
+	 *
+	 * @param string $name  Name
+	 * @param mixed  $value Value
+	 *
+	 * @return bool
+	 * @deprecated 1.9
+	 */
+	public function set($name, $value) {
+		elgg_deprecated_notice("Use -> instead of set()", 1.9);
+		$this->__set($name, $value);
+
+		return true;
+	}
+
+	/**
+	 * Get the original values of attribute(s) that have been modified since the entity was persisted.
+	 *
+	 * @return array
+	 */
+	public function getOriginalAttributes() {
+		return $this->orig_attributes;
+	}
+
+	/**
+	 * Get an attribute or metadata value
+	 *
+	 * If the name matches an attribute, the attribute is returned. If metadata
+	 * does not exist with that name, a null is returned.
+	 *
+	 * This only returns an array if there are multiple values for a particular
+	 * $name key.
+	 *
+	 * @param string $name Name of the attribute or metadata
+	 * @return mixed
+	 */
+	public function __get($name) {
+		if (array_key_exists($name, $this->attributes)) {
+			if ($name === 'subtype' && $this->attributes['guid']) {
+				// note: only show deprecation notice if user reads ->subtype after save/load
+				elgg_deprecated_notice("Use getSubtype()", 1.9);
+			}
+			return $this->attributes[$name];
+		}
+
+		if ($name === 'tables_split' || $name === 'tables_loaded') {
+			elgg_deprecated_notice("Do not read/write ->tables_split or ->tables_loaded.", "2.1");
+			return 2;
+		}
+
+		return $this->getMetadata($name);
+	}
+
+	/**
+	 * Return the value of an attribute or metadata
+	 *
+	 * @param string $name Name
+	 * @return mixed Returns the value of a given value, or null.
+	 * @deprecated 1.9
+	 */
+	public function get($name) {
+		elgg_deprecated_notice("Use -> instead of get()", 1.9);
+		return $this->__get($name);
+	}
+
+	/**
+	 * Get the entity's display name
+	 *
 	 * @return string The title or name of this entity.
 	 */
 	abstract public function getDisplayName();
 
 	/**
 	 * Sets the title or name of this entity.
+	 *
+	 * @param string $displayName The title or name of this entity.
+	 * @return void
 	 */
 	abstract public function setDisplayName($displayName);
 
@@ -253,12 +308,12 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @param string $name Name
 	 *
-	 * @return mixed The value, or NULL if not found.
+	 * @return mixed The value, or null if not found.
 	 */
-	public function getMetaData($name) {
+	public function getMetadata($name) {
 		$guid = $this->getGUID();
 
-		if (! $guid) {
+		if (!$guid) {
 			if (isset($this->temp_metadata[$name])) {
 				// md is returned as an array only if more than 1 entry
 				if (count($this->temp_metadata[$name]) == 1) {
@@ -273,14 +328,14 @@ abstract class ElggEntity extends ElggData implements
 
 		// upon first cache miss, just load/cache all the metadata and retry.
 		// if this works, the rest of this function may not be needed!
-		$cache = elgg_get_metadata_cache();
-		if ($cache->isKnown($guid, $name)) {
-			return $cache->load($guid, $name);
+		$cache = _elgg_services()->metadataCache;
+		if ($cache->isLoaded($guid)) {
+			return $cache->getSingle($guid, $name);
 		} else {
 			$cache->populateFromEntities(array($guid));
 			// in case ignore_access was on, we have to check again...
-			if ($cache->isKnown($guid, $name)) {
-				return $cache->load($guid, $name);
+			if ($cache->isLoaded($guid)) {
+				return $cache->getSingle($guid, $name);
 			}
 		}
 
@@ -288,6 +343,7 @@ abstract class ElggEntity extends ElggData implements
 			'guid' => $guid,
 			'metadata_name' => $name,
 			'limit' => 0,
+			'distinct' => false,
 		));
 
 		$value = null;
@@ -300,8 +356,6 @@ abstract class ElggEntity extends ElggData implements
 			$value = metadata_array_to_values($md);
 		}
 
-		$cache->save($guid, $name, $value);
-
 		return $value;
 	}
 
@@ -313,8 +367,9 @@ abstract class ElggEntity extends ElggData implements
 	 * @param string $name The name of the attribute or metadata.
 	 *
 	 * @return void
+	 * @todo some attributes should be set to null or other default values
 	 */
-	function __unset($name) {
+	public function __unset($name) {
 		if (array_key_exists($name, $this->attributes)) {
 			$this->attributes[$name] = "";
 		} else {
@@ -323,23 +378,26 @@ abstract class ElggEntity extends ElggData implements
 	}
 
 	/**
-	 * Set a piece of metadata.
+	 * Set metadata on this entity.
 	 *
-	 * Plugin authors should use the magic methods or create_metadata().
-	 *
-	 * @warning The metadata will inherit the parent entity's owner and access ID.
-	 * If you want to write metadata with a different owner, use create_metadata().
-	 *
-	 * @access private
+	 * Plugin developers usually want to use the magic set method ($entity->name = 'value').
+	 * Use this method if you want to explicitly set the owner or access of the metadata.
+	 * You cannot set the owner/access before the entity has been saved.
 	 *
 	 * @param string $name       Name of the metadata
 	 * @param mixed  $value      Value of the metadata (doesn't support assoc arrays)
-	 * @param string $value_type Types supported: integer and string. Will auto-identify if not set
-	 * @param bool   $multiple   Allow multiple values for a single name (doesn't support assoc arrays)
+	 * @param string $value_type 'text', 'integer', or '' for automatic detection
+	 * @param bool   $multiple   Allow multiple values for a single name.
+	 *                           Does not support associative arrays.
+	 * @param int    $owner_guid GUID of entity that owns the metadata.
+	 *                           Default is owner of entity.
+	 * @param int    $access_id  Who can read the metadata relative to the owner.
+	 *                           Default is the access level of the entity.
 	 *
 	 * @return bool
+	 * @throws InvalidArgumentException
 	 */
-	public function setMetaData($name, $value, $value_type = null, $multiple = false) {
+	public function setMetadata($name, $value, $value_type = '', $multiple = false, $owner_guid = 0, $access_id = null) {
 
 		// normalize value to an array that we will loop over
 		// remove indexes if value already an array.
@@ -359,8 +417,8 @@ abstract class ElggEntity extends ElggData implements
 					'limit' => 0
 				);
 				// @todo in 1.9 make this return false if can't add metadata
-				// http://trac.elgg.org/ticket/4520
-				// 
+				// https://github.com/elgg/elgg/issues/4520
+				//
 				// need to remove access restrictions right now to delete
 				// because this is the expected behavior
 				$ia = elgg_set_ignore_access(true);
@@ -370,24 +428,33 @@ abstract class ElggEntity extends ElggData implements
 				elgg_set_ignore_access($ia);
 			}
 
+			$owner_guid = (int)$owner_guid;
+			$access_id = ($access_id === null) ? $this->getAccessId() : (int)$access_id;
+			$owner_guid = $owner_guid ? $owner_guid : $this->getOwnerGUID();
+
 			// add new md
 			$result = true;
 			foreach ($value as $value_tmp) {
-				// at this point $value should be appended because it was cleared above if needed.
+				// at this point $value is appended because it was cleared above if needed.
 				$md_id = create_metadata($this->getGUID(), $name, $value_tmp, $value_type,
-						$this->getOwnerGUID(), $this->getAccessId(), true);
+						$owner_guid, $access_id, true);
 				if (!$md_id) {
 					return false;
 				}
 			}
 
 			return $result;
-		}
+		} else {
+			// unsaved entity. store in temp array
 
-		// unsaved entity. store in temp array
-		// returning single entries instead of an array of 1 element is decided in
-		// getMetaData(), just like pulling from the db.
-		else {
+			// returning single entries instead of an array of 1 element is decided in
+			// getMetaData(), just like pulling from the db.
+
+			if ($owner_guid != 0 || $access_id !== null) {
+				$msg = "owner guid and access id cannot be used in \ElggEntity::setMetadata() until entity is saved.";
+				throw new \InvalidArgumentException($msg);
+			}
+
 			// if overwrite, delete first
 			if (!$multiple || !isset($this->temp_metadata[$name])) {
 				$this->temp_metadata[$name] = array();
@@ -452,20 +519,6 @@ abstract class ElggEntity extends ElggData implements
 	}
 
 	/**
-	 * Remove metadata
-	 *
-	 * @warning Calling this with no or empty arguments will clear all metadata on the entity.
-	 *
-	 * @param string $name The name of the metadata to clear
-	 * @return mixed bool
-	 * @deprecated 1.8 Use deleteMetadata()
-	 */
-	public function clearMetaData($name = '') {
-		elgg_deprecated_notice('ElggEntity->clearMetadata() is deprecated by ->deleteMetadata()', 1.8);
-		return $this->deleteMetadata($name);
-	}
-
-	/**
 	 * Disables metadata for this entity, optionally based on name.
 	 *
 	 * @param string $name An options name of metadata to disable.
@@ -510,7 +563,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @param string $name The name of the volatile data
 	 *
-	 * @return mixed The value or NULL if not found.
+	 * @return mixed The value or null if not found.
 	 */
 	public function getVolatileData($name) {
 		if (!is_array($this->volatile)) {
@@ -520,7 +573,7 @@ abstract class ElggEntity extends ElggData implements
 		if (array_key_exists($name, $this->volatile)) {
 			return $this->volatile[$name];
 		} else {
-			return NULL;
+			return null;
 		}
 	}
 
@@ -542,59 +595,51 @@ abstract class ElggEntity extends ElggData implements
 
 	/**
 	 * Remove all relationships to and from this entity.
+	 * If you pass a relationship name, only relationships matching that name
+	 * will be deleted.
 	 *
-	 * @return true
-	 * @todo This should actually return if it worked.
-	 * @see ElggEntity::addRelationship()
-	 * @see ElggEntity::removeRelationship()
-	 */
-	public function deleteRelationships() {
-		remove_entity_relationships($this->getGUID());
-		remove_entity_relationships($this->getGUID(), "", true);
-		return true;
-	}
-
-	/**
-	 * Remove all relationships to and from this entity.
+	 * @warning Calling this with no $relationship will clear all relationships
+	 * for this entity.
 	 *
+	 * @param null|string $relationship The name of the relationship to remove.
 	 * @return bool
-	 * @see ElggEntity::addRelationship()
-	 * @see ElggEntity::removeRelationship()
-	 * @deprecated 1.8 Use ->deleteRelationship()
+	 * @see \ElggEntity::addRelationship()
+	 * @see \ElggEntity::removeRelationship()
 	 */
-	public function clearRelationships() {
-		elgg_deprecated_notice('ElggEntity->clearRelationships() is deprecated by ->deleteRelationships()', 1.8);
-		return $this->deleteRelationships();
+	public function deleteRelationships($relationship = null) {
+		$relationship = (string)$relationship;
+		$result = remove_entity_relationships($this->getGUID(), $relationship);
+		return $result && remove_entity_relationships($this->getGUID(), $relationship, true);
 	}
 
 	/**
 	 * Add a relationship between this an another entity.
 	 *
-	 * @tip Read the relationship like "$guid is a $relationship of this entity."
+	 * @tip Read the relationship like "This entity is a $relationship of $guid_two."
 	 *
-	 * @param int    $guid         Entity to link to.
+	 * @param int    $guid_two     GUID of the target entity of the relationship.
 	 * @param string $relationship The type of relationship.
 	 *
 	 * @return bool
-	 * @see ElggEntity::removeRelationship()
-	 * @see ElggEntity::clearRelationships()
+	 * @see \ElggEntity::removeRelationship()
+	 * @see \ElggEntity::deleteRelationships()
 	 */
-	public function addRelationship($guid, $relationship) {
-		return add_entity_relationship($this->getGUID(), $relationship, $guid);
+	public function addRelationship($guid_two, $relationship) {
+		return add_entity_relationship($this->getGUID(), $relationship, $guid_two);
 	}
 
 	/**
 	 * Remove a relationship
 	 *
-	 * @param int $guid         GUID of the entity to make a relationship with
-	 * @param str $relationship Name of relationship
+	 * @param int    $guid_two     GUID of the target entity of the relationship.
+	 * @param string $relationship The type of relationship.
 	 *
 	 * @return bool
-	 * @see ElggEntity::addRelationship()
-	 * @see ElggEntity::clearRelationships()
+	 * @see \ElggEntity::addRelationship()
+	 * @see \ElggEntity::deleteRelationships()
 	 */
-	public function removeRelationship($guid, $relationship) {
-		return remove_entity_relationship($this->getGUID(), $relationship, $guid);
+	public function removeRelationship($guid_two, $relationship) {
+		return remove_entity_relationship($this->getGUID(), $relationship, $guid_two);
 	}
 
 	/**
@@ -608,7 +653,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return bool
 	 */
-	function setPrivateSetting($name, $value) {
+	public function setPrivateSetting($name, $value) {
 		if ((int) $this->guid > 0) {
 			return set_private_setting($this->getGUID(), $name, $value);
 		} else {
@@ -622,9 +667,9 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @param string $name Name of the private setting
 	 *
-	 * @return mixed
+	 * @return mixed Null if the setting does not exist
 	 */
-	function getPrivateSetting($name) {
+	public function getPrivateSetting($name) {
 		if ((int) ($this->guid) > 0) {
 			return get_private_setting($this->getGUID(), $name);
 		} else {
@@ -642,7 +687,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return bool
 	 */
-	function removePrivateSetting($name) {
+	public function removePrivateSetting($name) {
 		return remove_private_setting($this->getGUID(), $name);
 	}
 
@@ -743,6 +788,7 @@ abstract class ElggEntity extends ElggData implements
 	private function getAnnotationCalculation($name, $calculation) {
 		$options = array(
 			'guid' => $this->getGUID(),
+			'distinct' => false,
 			'annotation_name' => $name,
 			'annotation_calculation' => $calculation
 		);
@@ -758,17 +804,17 @@ abstract class ElggEntity extends ElggData implements
 	 * @warning Annotating an unsaved entity more than once with the same name
 	 *          will only save the last annotation.
 	 *
-	 * @param string $name      Annotation name
-	 * @param mixed  $value     Annotation value
-	 * @param int    $access_id Access ID
-	 * @param int    $owner_id  GUID of the annotation owner
-	 * @param string $vartype   The type of annotation value
+	 * @param string $name       Annotation name
+	 * @param mixed  $value      Annotation value
+	 * @param int    $access_id  Access ID
+	 * @param int    $owner_guid GUID of the annotation owner
+	 * @param string $vartype    The type of annotation value
 	 *
-	 * @return bool
+	 * @return bool|int Returns int if an annotation is saved
 	 */
-	function annotate($name, $value, $access_id = ACCESS_PRIVATE, $owner_id = 0, $vartype = "") {
+	public function annotate($name, $value, $access_id = ACCESS_PRIVATE, $owner_guid = 0, $vartype = "") {
 		if ((int) $this->guid > 0) {
-			return create_annotation($this->getGUID(), $name, $value, $vartype, $owner_id, $access_id);
+			return create_annotation($this->getGUID(), $name, $value, $vartype, $owner_guid, $access_id);
 		} else {
 			$this->temp_annotations[$name] = $value;
 		}
@@ -776,50 +822,55 @@ abstract class ElggEntity extends ElggData implements
 	}
 
 	/**
-	 * Returns an array of annotations.
+	 * Gets an array of annotations.
 	 *
-	 * @param string $name   Annotation name
-	 * @param int    $limit  Limit
-	 * @param int    $offset Offset
-	 * @param string $order  Order by time: asc or desc
+	 * To retrieve annotations on an unsaved entity, pass array('name' => [annotation name])
+	 * as the options array.
+	 *
+	 * @param array  $options Array of options for elgg_get_annotations() except guid. This
+	 *               may be passed a string annotation name, but this usage is deprecated.
+	 * @param int    $limit   Limit (deprecated)
+	 * @param int    $offset  Offset (deprecated)
+	 * @param string $order   Order by time: asc or desc (deprecated)
 	 *
 	 * @return array
+	 * @see elgg_get_annotations()
 	 */
-	function getAnnotations($name, $limit = 50, $offset = 0, $order = "asc") {
+	public function getAnnotations($options = array(), $limit = 50, $offset = 0, $order = "asc") {
+		if (!is_array($options)) {
+			elgg_deprecated_notice("\ElggEntity::getAnnotations() takes an array of options.", 1.9);
+		}
+
 		if ((int) ($this->guid) > 0) {
+			if (!is_array($options)) {
+				$options = array(
+					'guid' => $this->guid,
+					'annotation_name' => $options,
+					'limit' => $limit,
+					'offset' => $offset,
+				);
 
-			$options = array(
-				'guid' => $this->guid,
-				'annotation_name' => $name,
-				'limit' => $limit,
-				'offset' => $offset,
-			);
-
-			if ($order != 'asc') {
-				$options['reverse_order_by'] = true;
+				if ($order != 'asc') {
+					$options['reverse_order_by'] = true;
+				}
+			} else {
+				$options['guid'] = $this->guid;
 			}
 
 			return elgg_get_annotations($options);
-		} else if (isset($this->temp_annotations[$name])) {
-			return array($this->temp_annotations[$name]);
 		} else {
-			return array();
-		}
-	}
+			if (!is_array($options)) {
+				$name = $options;
+			} else {
+				$name = elgg_extract('annotation_name', $options, '');
+			}
 
-	/**
-	 * Remove an annotation or all annotations for this entity.
-	 *
-	 * @warning Calling this method with no or an empty argument will remove
-	 * all annotations on the entity.
-	 *
-	 * @param string $name Annotation name
-	 * @return bool
-	 * @deprecated 1.8 Use ->deleteAnnotations()
-	 */
-	function clearAnnotations($name = "") {
-		elgg_deprecated_notice('ElggEntity->clearAnnotations() is deprecated by ->deleteAnnotations()', 1.8);
-		return $this->deleteAnnotations($name);
+			if (isset($this->temp_annotations[$name])) {
+				return array($this->temp_annotations[$name]);
+			}
+		}
+
+		return array();
 	}
 
 	/**
@@ -829,7 +880,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return int
 	 */
-	function countAnnotations($name = "") {
+	public function countAnnotations($name = "") {
 		return $this->getAnnotationCalculation($name, 'count');
 	}
 
@@ -840,7 +891,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return int
 	 */
-	function getAnnotationsAvg($name) {
+	public function getAnnotationsAvg($name) {
 		return $this->getAnnotationCalculation($name, 'avg');
 	}
 
@@ -851,7 +902,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return int
 	 */
-	function getAnnotationsSum($name) {
+	public function getAnnotationsSum($name) {
 		return $this->getAnnotationCalculation($name, 'sum');
 	}
 
@@ -862,7 +913,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return int
 	 */
-	function getAnnotationsMin($name) {
+	public function getAnnotationsMin($name) {
 		return $this->getAnnotationCalculation($name, 'min');
 	}
 
@@ -873,7 +924,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return int
 	 */
-	function getAnnotationsMax($name) {
+	public function getAnnotationsMax($name) {
 		return $this->getAnnotationCalculation($name, 'max');
 	}
 
@@ -883,51 +934,66 @@ abstract class ElggEntity extends ElggData implements
 	 * @return int Number of comments
 	 * @since 1.8.0
 	 */
-	function countComments() {
+	public function countComments() {
 		$params = array('entity' => $this);
-		$num = elgg_trigger_plugin_hook('comments:count', $this->getType(), $params);
+		$num = _elgg_services()->hooks->trigger('comments:count', $this->getType(), $params);
 
 		if (is_int($num)) {
 			return $num;
 		} else {
-			return $this->getAnnotationCalculation('generic_comment', 'count');
+			return elgg_get_entities(array(
+				'type' => 'object',
+				'subtype' => 'comment',
+				'container_guid' => $this->getGUID(),
+				'count' => true,
+				'distinct' => false,
+			));
 		}
 	}
 
 	/**
 	 * Gets an array of entities with a relationship to this entity.
 	 *
-	 * @param string $relationship Relationship type (eg "friends")
-	 * @param bool   $inverse      Is this an inverse relationship?
-	 * @param int    $limit        Number of elements to return
-	 * @param int    $offset       Indexing offset
+	 * @param array $options Options array. See elgg_get_entities_from_relationship()
+	 *                       for a list of options. 'relationship_guid' is set to
+	 *                       this entity.
+	 * @param bool  $inverse Is this an inverse relationship? (deprecated)
+	 * @param int   $limit   Number of elements to return (deprecated)
+	 * @param int   $offset  Indexing offset (deprecated)
 	 *
 	 * @return array|false An array of entities or false on failure
+	 * @see elgg_get_entities_from_relationship()
 	 */
-	function getEntitiesFromRelationship($relationship, $inverse = false, $limit = 50, $offset = 0) {
-		return elgg_get_entities_from_relationship(array(
-			'relationship' => $relationship,
-			'relationship_guid' => $this->getGUID(),
-			'inverse_relationship' => $inverse,
-			'limit' => $limit,
-			'offset' => $offset
-		));
+	public function getEntitiesFromRelationship($options = array(), $inverse = false, $limit = 50, $offset = 0) {
+		if (is_array($options)) {
+			$options['relationship_guid'] = $this->getGUID();
+			return elgg_get_entities_from_relationship($options);
+		} else {
+			elgg_deprecated_notice("\ElggEntity::getEntitiesFromRelationship takes an options array", 1.9);
+			return elgg_get_entities_from_relationship(array(
+				'relationship' => $options,
+				'relationship_guid' => $this->getGUID(),
+				'inverse_relationship' => $inverse,
+				'limit' => $limit,
+				'offset' => $offset
+			));
+		}
 	}
 
 	/**
-	 * Gets the number of of entities from a specific relationship type
+	 * Gets the number of entities from a specific relationship type
 	 *
 	 * @param string $relationship         Relationship type (eg "friends")
 	 * @param bool   $inverse_relationship Invert relationship
 	 *
 	 * @return int|false The number of entities or false on failure
 	 */
-	function countEntitiesFromRelationship($relationship, $inverse_relationship = FALSE) {
+	public function countEntitiesFromRelationship($relationship, $inverse_relationship = false) {
 		return elgg_get_entities_from_relationship(array(
 			'relationship' => $relationship,
 			'relationship_guid' => $this->getGUID(),
 			'inverse_relationship' => $inverse_relationship,
-			'count' => TRUE
+			'count' => true
 		));
 	}
 
@@ -939,85 +1005,58 @@ abstract class ElggEntity extends ElggData implements
 	 * @param int $user_guid The user GUID, optionally (default: logged in user)
 	 *
 	 * @return bool Whether this entity is editable by the given user.
+	 * @see elgg_set_ignore_access()
 	 */
-	function canEdit($user_guid = 0) {
-		$user_guid = (int)$user_guid;
-		$user = get_entity($user_guid);
-		if (!$user) {
-			$user = elgg_get_logged_in_user_entity();
-		}
+	public function canEdit($user_guid = 0) {
+		return _elgg_services()->userCapabilities->canEdit($this, $user_guid);
+	}
 
-		// Test user if possible - should default to false unless a plugin hook says otherwise
-		if ($user) {
-			if ($this->getOwnerGUID() == $user->getGUID()) {
-				$return = true;
-			}
-			
-			if ($this->getContainerGUID() == $user->getGUID()) {
-				$return = true;
-			}
-			
-			if ($this->getGUID() == $user->getGUID()) {
-				$return = true;
-			}
-
-			$container = $this->getContainerEntity();
-			if ($container && $container->canEdit($user->getGUID())) {
-				$return = true;
-			}
-		}
-
-		$params = array('entity' => $this, 'user' => $user);
-		return elgg_trigger_plugin_hook('permissions_check', $this->type, $params, $return);
+	/**
+	 * Can a user delete this entity?
+	 *
+	 * @tip Can be overridden by registering for the permissions_check:delete plugin hook.
+	 *
+	 * @param int $user_guid The user GUID, optionally (default: logged in user)
+	 *
+	 * @return bool Whether this entity is deletable by the given user.
+	 * @since 1.11
+	 * @see elgg_set_ignore_access()
+	 */
+	public function canDelete($user_guid = 0) {
+		return _elgg_services()->userCapabilities->canDelete($this, $user_guid);
 	}
 
 	/**
 	 * Can a user edit metadata on this entity?
 	 *
+	 * If no specific metadata is passed, it returns whether the user can
+	 * edit any metadata on the entity.
+	 *
 	 * @tip Can be overridden by by registering for the permissions_check:metadata
 	 * plugin hook.
 	 *
-	 * @param ElggMetadata $metadata  The piece of metadata to specifically check
-	 * @param int          $user_guid The user GUID, optionally (default: logged in user)
+	 * @param \ElggMetadata $metadata  The piece of metadata to specifically check or null for any metadata
+	 * @param int           $user_guid The user GUID, optionally (default: logged in user)
 	 *
-	 * @return bool Whether the user is allowed to edit metadata on this entity.
+	 * @return bool
+	 * @see elgg_set_ignore_access()
 	 */
-	function canEditMetadata($metadata = null, $user_guid = 0) {
-		if (!$this->guid) {
-			return false;
-		}
-		
-		$return = null;
-
-		if ($metadata->owner_guid == 0) {
-			$return = true;
-		}
-		
-		if (is_null($return)) {
-			$return = $this->canEdit($user_guid);
-		}
-
-		if ($user_guid) {
-			$user = get_entity($user_guid);
-		} else {
-			$user = elgg_get_logged_in_user_entity();
-		}
-
-		$params = array('entity' => $this, 'user' => $user, 'metadata' => $metadata);
-		return elgg_trigger_plugin_hook('permissions_check:metadata', $this->type, $params, $return);
+	public function canEditMetadata($metadata = null, $user_guid = 0) {
+		return _elgg_services()->userCapabilities->canEditMetadata($this, $user_guid, $metadata);
 	}
 
 	/**
 	 * Can a user add an entity to this container
 	 *
-	 * @param int    $user_guid The user.
+	 * @param int    $user_guid The GUID of the user creating the entity (0 for logged in user).
 	 * @param string $type      The type of entity we're looking to write
 	 * @param string $subtype   The subtype of the entity we're looking to write
 	 *
 	 * @return bool
+	 * @see elgg_set_ignore_access()
 	 */
 	public function canWriteToContainer($user_guid = 0, $type = 'all', $subtype = 'all') {
-		return can_write_to_container($user_guid, $this->guid, $type, $subtype);
+		return _elgg_services()->userCapabilities->canWriteToContainer($this, $user_guid, $type, $subtype);
 	}
 
 	/**
@@ -1025,28 +1064,20 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @tip Can be overridden by registering for the permissions_check:comment,
 	 * <entity type> plugin hook.
-	 * 
+	 *
 	 * @param int $user_guid User guid (default is logged in user)
 	 *
 	 * @return bool
 	 */
 	public function canComment($user_guid = 0) {
-		if ($user_guid == 0) {
-			$user_guid = elgg_get_logged_in_user_guid();
-		}
-		$user = get_entity($user_guid);
-
-		// By default, we don't take a position of whether commenting is allowed
-		// because it is handled by the subclasses of ElggEntity
-		$params = array('entity' => $this, 'user' => $user);
-		return elgg_trigger_plugin_hook('permissions_check:comment', $this->type, $params, null);
+		return _elgg_services()->userCapabilities->canComment($this, $user_guid);
 	}
 
 	/**
 	 * Can a user annotate an entity?
 	 *
-	 * @tip Can be overridden by registering for the permissions_check:annotate,
-	 * <entity type> plugin hook.
+	 * @tip Can be overridden by registering for the plugin hook [permissions_check:annotate:<name>,
+	 * <entity type>] or [permissions_check:annotate, <entity type>]. The hooks are called in that order.
 	 *
 	 * @tip If you want logged out users to annotate an object, do not call
 	 * canAnnotate(). It's easier than using the plugin hook.
@@ -1057,22 +1088,7 @@ abstract class ElggEntity extends ElggData implements
 	 * @return bool
 	 */
 	public function canAnnotate($user_guid = 0, $annotation_name = '') {
-		if ($user_guid == 0) {
-			$user_guid = elgg_get_logged_in_user_guid();
-		}
-		$user = get_entity($user_guid);
-
-		$return = true;
-		if (!$user) {
-			$return = false;
-		}
-
-		$params = array(
-			'entity' => $this,
-			'user' => $user,
-			'annotation_name' => $annotation_name,
-		);
-		return elgg_trigger_plugin_hook('permissions_check:annotate', $this->type, $params, $return);
+		return _elgg_services()->userCapabilities->canAnnotate($this, $user_guid, $annotation_name);
 	}
 
 	/**
@@ -1081,7 +1097,7 @@ abstract class ElggEntity extends ElggData implements
 	 * @return int The access ID
 	 */
 	public function getAccessID() {
-		return $this->get('access_id');
+		return $this->access_id;
 	}
 
 	/**
@@ -1090,7 +1106,7 @@ abstract class ElggEntity extends ElggData implements
 	 * @return int|null GUID
 	 */
 	public function getGUID() {
-		return $this->get('guid');
+		return $this->guid;
 	}
 
 	/**
@@ -1099,7 +1115,7 @@ abstract class ElggEntity extends ElggData implements
 	 * @return string The entity type
 	 */
 	public function getType() {
-		return $this->get('type');
+		return $this->type;
 	}
 
 	/**
@@ -1108,7 +1124,11 @@ abstract class ElggEntity extends ElggData implements
 	 * @return string The entity subtype
 	 */
 	public function getSubtype() {
-		return $this->get('subtype');
+		// If this object hasn't been saved, then return the subtype string.
+		if ($this->attributes['guid']) {
+			return get_subtype_from_id($this->attributes['subtype']);
+		}
+		return $this->attributes['subtype'];
 	}
 
 	/**
@@ -1117,24 +1137,13 @@ abstract class ElggEntity extends ElggData implements
 	 * @return int The owner GUID
 	 */
 	public function getOwnerGUID() {
-		return $this->owner_guid;
+		return (int)$this->owner_guid;
 	}
 
 	/**
-	 * Return the guid of the entity's owner.
+	 * Gets the \ElggEntity that owns this entity.
 	 *
-	 * @return int The owner GUID
-	 * @deprecated 1.8 Use getOwnerGUID()
-	 */
-	public function getOwner() {
-		elgg_deprecated_notice("ElggEntity::getOwner deprecated for ElggEntity::getOwnerGUID", 1.8);
-		return $this->getOwnerGUID();
-	}
-
-	/**
-	 * Gets the ElggEntity that owns this entity.
-	 *
-	 * @return ElggEntity The owning entity
+	 * @return \ElggEntity The owning entity
 	 */
 	public function getOwnerEntity() {
 		return get_entity($this->owner_guid);
@@ -1148,24 +1157,7 @@ abstract class ElggEntity extends ElggData implements
 	 * @return bool
 	 */
 	public function setContainerGUID($container_guid) {
-		$container_guid = (int)$container_guid;
-
-		return $this->set('container_guid', $container_guid);
-	}
-
-	/**
-	 * Set the container for this object.
-	 *
-	 * @param int $container_guid The ID of the container.
-	 *
-	 * @return bool
-	 * @deprecated 1.8 use setContainerGUID()
-	 */
-	public function setContainer($container_guid) {
-		elgg_deprecated_notice("ElggObject::setContainer deprecated for ElggEntity::setContainerGUID", 1.8);
-		$container_guid = (int)$container_guid;
-
-		return $this->set('container_guid', $container_guid);
+		return $this->container_guid = (int)$container_guid;
 	}
 
 	/**
@@ -1174,24 +1166,13 @@ abstract class ElggEntity extends ElggData implements
 	 * @return int
 	 */
 	public function getContainerGUID() {
-		return $this->get('container_guid');
-	}
-
-	/**
-	 * Gets the container GUID for this entity.
-	 *
-	 * @return int
-	 * @deprecated 1.8 Use getContainerGUID()
-	 */
-	public function getContainer() {
-		elgg_deprecated_notice("ElggObject::getContainer deprecated for ElggEntity::getContainerGUID", 1.8);
-		return $this->get('container_guid');
+		return (int)$this->container_guid;
 	}
 
 	/**
 	 * Get the container entity for this object.
 	 *
-	 * @return ElggEntity
+	 * @return \ElggEntity
 	 * @since 1.8.0
 	 */
 	public function getContainerEntity() {
@@ -1204,46 +1185,53 @@ abstract class ElggEntity extends ElggData implements
 	 * @return int UNIX epoch time
 	 */
 	public function getTimeUpdated() {
-		return $this->get('time_updated');
+		return $this->time_updated;
 	}
 
 	/**
-	 * Returns the URL for this entity.
+	 * Gets the URL for this entity.
 	 *
-	 * @tip Can be overridden with {@link register_entity_url_handler()}.
+	 * Plugins can register for the 'entity:url', <type> plugin hook to
+	 * customize the url for an entity.
 	 *
 	 * @return string The URL of the entity
-	 * @see register_entity_url_handler()
-	 * @see ElggEntity::setURL()
 	 */
 	public function getURL() {
-		if (!empty($this->url_override)) {
-			return $this->url_override;
-		}
-		
-		global $CONFIG;
 		
 		$url = "";
 
-		if (isset($CONFIG->entity_url_handler[$this->getType()][$this->getSubtype()])) {
-			$function = $CONFIG->entity_url_handler[$this->getType()][$this->getSubtype()];
-			if (is_callable($function)) {
-				$url = call_user_func($function, $this);
+		// @todo remove when elgg_register_entity_url_handler() has been removed
+		if ($this->guid) {
+			global $CONFIG;
+			if (isset($CONFIG->entity_url_handler[$this->getType()][$this->getSubtype()])) {
+				$function = $CONFIG->entity_url_handler[$this->getType()][$this->getSubtype()];
+				if (is_callable($function)) {
+					$url = call_user_func($function, $this);
+				}
+			} elseif (isset($CONFIG->entity_url_handler[$this->getType()]['all'])) {
+				$function = $CONFIG->entity_url_handler[$this->getType()]['all'];
+				if (is_callable($function)) {
+					$url = call_user_func($function, $this);
+				}
+			} elseif (isset($CONFIG->entity_url_handler['all']['all'])) {
+				$function = $CONFIG->entity_url_handler['all']['all'];
+				if (is_callable($function)) {
+					$url = call_user_func($function, $this);
+				}
 			}
-		} elseif (isset($CONFIG->entity_url_handler[$this->getType()]['all'])) {
-			$function = $CONFIG->entity_url_handler[$this->getType()]['all'];
-			if (is_callable($function)) {
-				$url = call_user_func($function, $this);
-			}
-		} elseif (isset($CONFIG->entity_url_handler['all']['all'])) {
-			$function = $CONFIG->entity_url_handler['all']['all'];
-			if (is_callable($function)) {
-				$url = call_user_func($function, $this);
+
+			if ($url) {
+				$url = elgg_normalize_url($url);
 			}
 		}
 
-		if ($url == "") {
-			$url = "view/" . $this_guid;
+		$type = $this->getType();
+		$params = array('entity' => $this);
+		$url = _elgg_services()->hooks->trigger('entity:url', $type, $params, $url);
+
+		// @todo remove when \ElggEntity::setURL() has been removed
+		if (!empty($this->url_override)) {
+			$url = $this->url_override;
 		}
 
 		return elgg_normalize_url($url);
@@ -1257,10 +1245,93 @@ abstract class ElggEntity extends ElggData implements
 	 * @param string $url The new item URL
 	 *
 	 * @return string The URL
+	 * @deprecated 1.9.0 See \ElggEntity::getURL() for details on the plugin hook
 	 */
 	public function setURL($url) {
+		elgg_deprecated_notice('\ElggEntity::setURL() has been replaced by the "entity:url" plugin hook', 1.9);
 		$this->url_override = $url;
 		return $url;
+	}
+
+	/**
+	 * Saves icons using an uploaded file as the source.
+	 *
+	 * @param string $input_name Form input name
+	 * @param string $type       The name of the icon. e.g., 'icon', 'cover_photo'
+	 * @param array  $coords     An array of cropping coordinates x1, y1, x2, y2
+	 * @return bool
+	 */
+	public function saveIconFromUploadedFile($input_name, $type = 'icon', array $coords = array()) {
+		return _elgg_services()->iconService->saveIconFromUploadedFile($this, $input_name, $type, $coords);
+	}
+
+	/**
+	 * Saves icons using a local file as the source.
+	 *
+	 * @param string $filename The full path to the local file
+	 * @param string $type     The name of the icon. e.g., 'icon', 'cover_photo'
+	 * @param array  $coords   An array of cropping coordinates x1, y1, x2, y2
+	 * @return bool
+	 */
+	public function saveIconFromLocalFile($filename, $type = 'icon', array $coords = array()) {
+		return _elgg_services()->iconService->saveIconFromLocalFile($this, $filename, $type, $coords);
+	}
+
+	/**
+	 * Saves icons using a file located in the data store as the source.
+	 *
+	 * @param string $file   An ElggFile instance
+	 * @param string $type   The name of the icon. e.g., 'icon', 'cover_photo'
+	 * @param array  $coords An array of cropping coordinates x1, y1, x2, y2
+	 * @return bool
+	 */
+	public function saveIconFromElggFile(\ElggFile $file, $type = 'icon', array $coords = array()) {
+		return _elgg_services()->iconService->saveIconFromElggFile($this, $file, $type, $coords);
+	}
+	
+	/**
+	 * Returns entity icon as an ElggIcon object
+	 * The icon file may or may not exist on filestore
+	 * 
+	 * @param string $size Size of the icon
+	 * @param string $type The name of the icon. e.g., 'icon', 'cover_photo'
+	 * @return \ElggIcon
+	 */
+	public function getIcon($size, $type = 'icon') {
+		return _elgg_services()->iconService->getIcon($this, $size, $type);
+	}
+
+	/**
+	 * Removes all icon files and metadata for the passed type of icon.
+	 * 
+	 * @param string $type The name of the icon. e.g., 'icon', 'cover_photo'
+	 * @return bool
+	 */
+	public function deleteIcon($type = 'icon') {
+		return _elgg_services()->iconService->deleteIcon($this, $type);
+	}
+	
+	/**
+	 * Returns the timestamp of when the icon was changed.
+	 * 
+	 * @param string $size The size of the icon
+	 * @param string $type The name of the icon. e.g., 'icon', 'cover_photo'
+	 * 
+	 * @return int|null A unix timestamp of when the icon was last changed, or null if not set.
+	 */
+	public function getIconLastChange($size, $type = 'icon') {
+		return _elgg_services()->iconService->getIconLastChange($this, $size, $type);
+	}
+	
+	/**
+	 * Returns if the entity has an icon of the passed type.
+	 *
+	 * @param string $size The size of the icon
+	 * @param string $type The name of the icon. e.g., 'icon', 'cover_photo'
+	 * @return bool
+	 */
+	public function hasIcon($size, $type = 'icon') {
+		return _elgg_services()->iconService->hasIcon($this, $size, $type);
 	}
 
 	/**
@@ -1269,103 +1340,105 @@ abstract class ElggEntity extends ElggData implements
 	 * Plugins can register for the 'entity:icon:url', <type> plugin hook
 	 * to customize the icon for an entity.
 	 *
-	 * @param string $size Size of the icon: tiny, small, medium, large
-	 *
+	 * @param mixed $params A string defining the size of the icon (e.g. tiny, small, medium, large)
+	 *                      or an array of parameters including 'size'
 	 * @return string The URL
 	 * @since 1.8.0
 	 */
-	public function getIconURL($size = 'medium') {
-		$size = elgg_strtolower($size);
-
-		if (isset($this->icon_override[$size])) {
-			elgg_deprecated_notice("icon_override on an individual entity is deprecated", 1.8);
-			return $this->icon_override[$size];
-		}
-
-		$type = $this->getType();
-		$params = array(
-			'entity' => $this,
-			'size' => $size,
-		);
-
-		$url = elgg_trigger_plugin_hook('entity:icon:url', $type, $params, null);
-		if ($url == null) {
-			$url = "_graphics/icons/default/$size.png";
-		}
-
-		return elgg_normalize_url($url);
+	public function getIconURL($params = array()) {
+		return _elgg_services()->iconService->getIconURL($this, $params);
 	}
 
 	/**
-	 * Returns a URL for the entity's icon.
+	 * Add this entity to a site
 	 *
-	 * @param string $size Either 'large', 'medium', 'small' or 'tiny'
+	 * This creates a 'member_of_site' relationship.
 	 *
-	 * @return string The url or false if no url could be worked out.
-	 * @deprecated Use getIconURL()
-	 */
-	public function getIcon($size = 'medium') {
-		elgg_deprecated_notice("getIcon() deprecated by getIconURL()", 1.8);
-		return $this->getIconURL($size);
-	}
-
-	/**
-	 * Set an icon override for an icon and size.
-	 *
-	 * @warning This override exists only for the life of the object.
-	 *
-	 * @param string $url  The url of the icon.
-	 * @param string $size The size its for.
+	 * @param \ElggSite $site The site to add this entity to
 	 *
 	 * @return bool
-	 * @deprecated 1.8 See getIconURL() for the plugin hook to use
+	 * @todo add \ElggSite type hint once we have removed addToSite() from \ElggUser
+	 * and \ElggObject
 	 */
-	public function setIcon($url, $size = 'medium') {
-		elgg_deprecated_notice("icon_override on an individual entity is deprecated", 1.8);
-
-		$url = sanitise_string($url);
-		$size = sanitise_string($size);
-
-		if (!$this->icon_override) {
-			$this->icon_override = array();
+	public function addToSite($site) {
+		if (!elgg_instanceof($site, 'site')) {
+			return false;
 		}
-		$this->icon_override[$size] = $url;
 
-		return true;
+		return $site->addEntity($this);
 	}
 
 	/**
-	 * Tests to see whether the object has been fully loaded.
+	 * Remove this entity from a site
+	 *
+	 * This deletes the 'member_of_site' relationship.
+	 *
+	 * @param \ElggSite $site The site to remove this entity from
+	 *
+	 * @return bool
+	 * @todo add \ElggSite type hint once we have removed addToSite() from \ElggUser
+	 */
+	public function removeFromSite($site) {
+		if (!elgg_instanceof($site, 'site')) {
+			return false;
+		}
+
+		return $site->removeEntity($this);
+	}
+
+	/**
+	 * Gets the sites this entity is a member of
+	 *
+	 * Site membership is determined by relationships and not site_guid.
+	 *
+	 * @param array $options Options array for elgg_get_entities_from_relationship()
+	 *                       Parameters set automatically by this method:
+	 *                       'relationship', 'relationship_guid', 'inverse_relationship'
+	 *
+	 * @return array
+	 * @todo add type hint when \ElggUser and \ElggObject have been updates
+	 */
+	public function getSites($options = array()) {
+		$options['relationship'] = 'member_of_site';
+		$options['relationship_guid'] = $this->guid;
+		$options['inverse_relationship'] = false;
+		if (!isset($options['site_guid']) || !isset($options['site_guids'])) {
+			$options['site_guids'] = ELGG_ENTITIES_ANY_VALUE;
+		}
+
+		return elgg_get_entities_from_relationship($options);
+	}
+
+	/**
+	 * Tests to see whether the object has been persisted.
 	 *
 	 * @return bool
 	 */
 	public function isFullyLoaded() {
-		return ! ($this->attributes['tables_loaded'] < $this->attributes['tables_split']);
+		return (bool)$this->guid;
 	}
 
 	/**
 	 * Save an entity.
 	 *
 	 * @return bool|int
+	 * @throws InvalidParameterException
 	 * @throws IOException
 	 */
 	public function save() {
 		$guid = $this->getGUID();
 		if ($guid > 0) {
-			if ($this->update()) {
-				if (elgg_trigger_event('update', $this->type, $this)) {
-					return true;
-				} else {
-					$this->delete();
-				}
-			}
+			return $this->update();
 		} else {
 			$guid = $this->create();
 			if ($guid) {
-				if (elgg_trigger_event('create', $this->type, $this)) {
+				if (_elgg_services()->events->trigger('create', $this->type, $this)) {
 					return $guid;
 				} else {
+					// plugins that return false to event don't need to override the access system
+					$ia = elgg_set_ignore_access(true);
 					$this->delete();
+					elgg_set_ignore_access($ia);
 				}
 			}
 		}
@@ -1390,56 +1463,92 @@ abstract class ElggEntity extends ElggData implements
 		global $CONFIG;
 
 		// Using attribute array directly; get function does something special!
-		$type = sanitize_string($this->attributes['type']);
+		$type = $this->getDatabase()->sanitizeString($this->attributes['type']);
 		if ($type == "") {
-			throw new InvalidParameterException(elgg_echo('InvalidParameterException:EntityTypeNotSet'));
+			throw new \InvalidParameterException("Entity type must be set.");
 		}
 		
 		$subtype = $this->attributes['subtype'];
 		$subtype_id = add_subtype($type, $subtype);
 		$owner_guid = (int)$this->attributes['owner_guid'];
 		$access_id = (int)$this->attributes['access_id'];
-		$time = time();
+		$now = (string)time();
+		$time_created = isset($this->attributes['time_created']) ? (int)$this->attributes['time_created'] : $now;
 
 		$site_guid = $this->attributes['site_guid'];
 		if ($site_guid == 0) {
 			$site_guid = $CONFIG->site_guid;
 		}
-		$site_guid = (int) $site_guid;
+		$site_guid = (int)$site_guid;
 		
 		$container_guid = $this->attributes['container_guid'];
 		if ($container_guid == 0) {
 			$container_guid = $owner_guid;
+			$this->attributes['container_guid'] = $container_guid;
 		}
 		$container_guid = (int)$container_guid;
-	
-		$owner = $this->getOwnerEntity();
-		if ($owner && !$owner->canWriteToContainer(0, $type, $subtype)) {
-			return false;
+
+		if ($access_id == ACCESS_DEFAULT) {
+			throw new \InvalidParameterException('ACCESS_DEFAULT is not a valid access level. See its documentation in elgglib.h');
 		}
-		
-		if ($owner_guid != $container_guid) {
-			$container = $this->getContainerEntity();
-			if ($container && !$container->canWriteToContainer(0, $type, $subype)) {
+
+		$user_guid = elgg_get_logged_in_user_guid();
+
+		// If given an owner, verify it can be loaded
+		if ($owner_guid) {
+			$owner = $this->getOwnerEntity();
+			if (!$owner) {
+				_elgg_services()->logger->error("User $user_guid tried to create a ($type, $subtype), but the given"
+					. " owner $owner_guid could not be loaded.");
 				return false;
-			}				
+			}
+
+			// If different owner than logged in, verify can write to container.
+
+			if ($user_guid != $owner_guid && !$owner->canWriteToContainer(0, $type, $subtype)) {
+				_elgg_services()->logger->error("User $user_guid tried to create a ($type, $subtype) with owner"
+					. " $owner_guid, but the user wasn't permitted to write to the owner's container.");
+				return false;
+			}
 		}
-		
+
+		// If given a container, verify it can be loaded and that the current user can write to it
+		if ($container_guid) {
+			$container = $this->getContainerEntity();
+			if (!$container) {
+				_elgg_services()->logger->error("User $user_guid tried to create a ($type, $subtype), but the given"
+					. " container $container_guid could not be loaded.");
+				return false;
+			}
+
+			if (!$container->canWriteToContainer(0, $type, $subtype)) {
+				_elgg_services()->logger->error("User $user_guid tried to create a ($type, $subtype), but was not"
+					. " permitted to write to container $container_guid.");
+				return false;
+			}
+		}
+
 		$result = $this->getDatabase()->insertData("INSERT into {$CONFIG->dbprefix}entities
 			(type, subtype, owner_guid, site_guid, container_guid,
 				access_id, time_created, time_updated, last_action)
 			values
-			('$type',$subtype_id, $owner_guid, $site_guid, $container_guid,
-				$access_id, $time, $time, $time)");	
+			('$type', $subtype_id, $owner_guid, $site_guid, $container_guid,
+				$access_id, $time_created, $now, $now)");
 
 		if (!$result) {
-			throw new IOException(elgg_echo('IOException:BaseEntitySaveFailed'));
+			throw new \IOException("Unable to save new object's base entity information!");
 		}
 	
-		$this->attributes['guid'] = $result;
-		
+		// for BC with 1.8, ->subtype always returns ID, ->getSubtype() the string
+		$this->attributes['subtype'] = (int)$subtype_id;
+		$this->attributes['guid'] = (int)$result;
+		$this->attributes['time_created'] = (int)$time_created;
+		$this->attributes['time_updated'] = (int)$now;
+		$this->attributes['last_action'] = (int)$now;
+		$this->attributes['site_guid'] = (int)$site_guid;
+		$this->attributes['container_guid'] = (int)$container_guid;
+
 		// Save any unsaved metadata
-		// @todo How to capture extra information (access id etc)
 		if (sizeof($this->temp_metadata) > 0) {
 			foreach ($this->temp_metadata as $name => $value) {
 				$this->$name = $value;
@@ -1466,50 +1575,78 @@ abstract class ElggEntity extends ElggData implements
 			$this->temp_private_settings = array();
 		}
 
-		cache_entity($this);
+		_elgg_services()->entityCache->set($this);
 		
 		return $result;
 	}
-	
+
 	/**
 	 * Update the entity in the database.
 	 *
 	 * @return bool Whether the update was successful.
+	 *
+	 * @throws InvalidParameterException
 	 */
 	protected function update() {
-		cache_entity($this);
-		
 		global $CONFIG;
 
-		$guid = (int)$this->get('guid');
-		$owner_guid = (int)$this->get('owner_guid');
-		$access_id = (int)$this->get('access_id');
-		$container_guid = (int)$this->get('container_guid');
-		$time_created = (int)$this->get('time_created');
-		$time = time();
-	
-		if (!$this->canEdit() || !elgg_trigger_event('update', $this->type, $this)) {
+		_elgg_services()->boot->invalidateCache($this->guid);
+
+		if (!$this->canEdit()) {
 			return false;
 		}
-		
-		$ret = $this->getDatabase()->updateData("UPDATE {$CONFIG->dbprefix}entities
-			set owner_guid='$owner_guid', access_id='$access_id',
-			container_guid='$container_guid', time_created='$time_created',
-			time_updated='$time' WHERE guid=$guid");
 
-		// TODO(evan): Move this to ElggObject?
-		if ($this instanceof ElggObject) {
+		// give old update event a chance to stop the update
+		if (!_elgg_services()->events->trigger('update', $this->type, $this)) {
+			return false;
+		}
+
+		// See #6225. We copy these after the update event in case a handler changed one of them.
+		$guid = (int)$this->guid;
+		$owner_guid = (int)$this->owner_guid;
+		$access_id = (int)$this->access_id;
+		$container_guid = (int)$this->container_guid;
+		$time_created = (int)$this->time_created;
+		$time = time();
+
+		if ($access_id == ACCESS_DEFAULT) {
+			throw new \InvalidParameterException('ACCESS_DEFAULT is not a valid access level. See its documentation in elgglib.php');
+		}
+
+		$query = "
+			UPDATE {$CONFIG->dbprefix}entities
+			SET owner_guid = '$owner_guid',
+				access_id = '$access_id',
+				container_guid = '$container_guid',
+				time_created = '$time_created',
+				time_updated = '$time'
+			WHERE guid = $guid
+		";
+		$ret = $this->getDatabase()->updateData($query);
+		
+		elgg_trigger_after_event('update', $this->type, $this);
+
+		// TODO(evan): Move this to \ElggObject?
+		if ($this instanceof \ElggObject) {
 			update_river_access_by_object($guid, $access_id);
 		}
 
 		// If memcache is available then delete this entry from the cache
 		static $newentity_cache;
 		if ((!$newentity_cache) && (is_memcache_available())) {
-			$newentity_cache = new ElggMemcache('new_entity_cache');
+			$newentity_cache = new \ElggMemcache('new_entity_cache');
 		}
 		if ($newentity_cache) {
 			$newentity_cache->delete($guid);
 		}
+
+		if ($ret !== false) {
+			$this->attributes['time_updated'] = $time;
+		}
+
+		_elgg_services()->entityCache->set($this);
+
+		$this->orig_attributes = [];
 
 		// Handle cases where there was no error BUT no rows were updated!
 		return $ret !== false;
@@ -1518,12 +1655,12 @@ abstract class ElggEntity extends ElggData implements
 	/**
 	 * Loads attributes from the entities table into the object.
 	 *
-	 * @param mixed $guid GUID of entity or stdClass object from entities table
+	 * @param mixed $guid GUID of entity or \stdClass object from entities table
 	 *
 	 * @return bool
 	 */
 	protected function load($guid) {
-		if ($guid instanceof stdClass) {
+		if ($guid instanceof \stdClass) {
 			$row = $guid;
 		} else {
 			$row = get_entity_as_row($guid);
@@ -1541,20 +1678,15 @@ abstract class ElggEntity extends ElggData implements
 				$this->attributes[$key] = $value;
 			}
 
-			// Increment the portion counter
-			if (!$this->isFullyLoaded()) {
-				$this->attributes['tables_loaded']++;
-			}
-
-			// guid needs to be an int  http://trac.elgg.org/ticket/4111
+			// guid needs to be an int  https://github.com/elgg/elgg/issues/4111
 			$this->attributes['guid'] = (int)$this->attributes['guid'];
 
-			// subtype needs to be denormalized
-			$this->attributes['subtype'] = get_subtype_from_id($this->attributes['subtype']);
+			// for BC with 1.8, ->subtype always returns ID, ->getSubtype() the string
+			$this->attributes['subtype'] = (int)$this->attributes['subtype'];
 
 			// Cache object handle
 			if ($this->attributes['guid']) {
-				cache_entity($this);
+				_elgg_services()->entityCache->set($this);
 			}
 
 			return true;
@@ -1564,30 +1696,61 @@ abstract class ElggEntity extends ElggData implements
 	}
 
 	/**
+	 * Stores non-attributes from the loading of the entity as volatile data
+	 *
+	 * @param array $data Key value array
+	 * @return void
+	 */
+	protected function loadAdditionalSelectValues(array $data) {
+		foreach ($data as $name => $value) {
+			$this->setVolatileData("select:$name", $value);
+		}
+	}
+	
+	/**
+	 * Load new data from database into existing entity. Overwrites data but
+	 * does not change values not included in the latest data.
+	 *
+	 * @internal This is used when the same entity is selected twice during a
+	 * request in case different select clauses were used to load different data
+	 * into volatile data.
+	 *
+	 * @param \stdClass $row DB row with new entity data
+	 * @return bool
+	 * @access private
+	 */
+	public function refresh(\stdClass $row) {
+		if ($row instanceof \stdClass) {
+			return $this->load($row);
+		}
+		return false;
+	}
+
+	/**
 	 * Disable this entity.
 	 *
 	 * Disabled entities are not returned by getter functions.
-	 * To enable an entity, use {@link ElggEntity::enable()}.
+	 * To enable an entity, use {@link \ElggEntity::enable()}.
 	 *
 	 * Recursively disabling an entity will disable all entities
 	 * owned or contained by the parent entity.
 	 *
 	 * You can ignore the disabled field by using {@link access_show_hidden_entities()}.
 	 *
-	 * @internal Disabling an entity sets the 'enabled' column to 'no'.
+	 * @note Internal: Disabling an entity sets the 'enabled' column to 'no'.
 	 *
 	 * @param string $reason    Optional reason
 	 * @param bool   $recursive Recursively disable all contained entities?
 	 *
 	 * @return bool
-	 * @see ElggEntity::enable()
+	 * @see \ElggEntity::enable()
 	 */
 	public function disable($reason = "", $recursive = true) {
 		if (!$this->guid) {
 			return false;
 		}
 		
-		if (!elgg_trigger_event('disable', $this->type, $this)) {
+		if (!_elgg_services()->events->trigger('disable', $this->type, $this)) {
 			return false;
 		}
 		
@@ -1595,8 +1758,16 @@ abstract class ElggEntity extends ElggData implements
 			return false;
 		}
 
-		invalidate_cache_for_entity($this->guid);
-		
+		if ($this instanceof ElggUser && $this->banned === 'no') {
+			// temporarily ban to prevent using the site during disable
+			_elgg_services()->usersTable->markBanned($this->guid, true);
+			$unban_after = true;
+		} else {
+			$unban_after = false;
+		}
+
+		_elgg_services()->entityCache->remove($this->guid);
+
 		if ($reason) {
 			$this->disable_reason = $reason;
 		}
@@ -1608,15 +1779,21 @@ abstract class ElggEntity extends ElggData implements
 			$hidden = access_get_show_hidden_status();
 			access_show_hidden_entities(true);
 			$ia = elgg_set_ignore_access(true);
-			
-			$sub_entities = $this->getDatabase()->getData("SELECT * FROM {$CONFIG->dbprefix}entities
+
+			$query = "
+				SELECT *
+				FROM {$CONFIG->dbprefix}entities
 				WHERE (
-				container_guid = $guid
-				OR owner_guid = $guid
-				OR site_guid = $guid
-				) AND enabled='yes'", 'entity_row_to_elggstar');
+					container_guid = $guid
+					OR owner_guid = $guid
+					OR site_guid = $guid
+				) 
+				AND enabled = 'yes'
+			";
+			$sub_entities = $this->getDatabase()->getData($query, 'entity_row_to_elggstar');
 
 			if ($sub_entities) {
+				/* @var ElggEntity[] $sub_entities */
 				foreach ($sub_entities as $e) {
 					add_entity_relationship($e->guid, 'disabled_with', $this->guid);
 					$e->disable($reason);
@@ -1630,17 +1807,23 @@ abstract class ElggEntity extends ElggData implements
 		$this->disableMetadata();
 		$this->disableAnnotations();
 
-		$res = $this->getDatabase()->updateData("UPDATE {$CONFIG->dbprefix}entities
+		$res = $this->getDatabase()->updateData("
+			UPDATE {$CONFIG->dbprefix}entities
 			SET enabled = 'no'
-			WHERE guid = $guid");
+			WHERE guid = $guid
+		");
+
+		if ($unban_after) {
+			_elgg_services()->usersTable->markBanned($this->guid, false);
+		}
 
 		if ($res) {
 			$this->attributes['enabled'] = 'no';
+			_elgg_services()->events->trigger('disable:after', $this->type, $this);
 		}
 
 		return $res;
 	}
-
 
 	/**
 	 * Enable the entity
@@ -1658,7 +1841,7 @@ abstract class ElggEntity extends ElggData implements
 			return false;
 		}
 		
-		if (!elgg_trigger_event('enable', $this->type, $this)) {
+		if (!_elgg_services()->events->trigger('enable', $this->type, $this)) {
 			return false;
 		}
 		
@@ -1698,6 +1881,7 @@ abstract class ElggEntity extends ElggData implements
 	
 		if ($result) {
 			$this->attributes['enabled'] = 'yes';
+			_elgg_services()->events->trigger('enable:after', $this->type, $this);
 		}
 
 		return $result;
@@ -1730,31 +1914,37 @@ abstract class ElggEntity extends ElggData implements
 	 * @return bool
 	 */
 	public function delete($recursive = true) {
+		global $CONFIG;
+
 		$guid = $this->guid;
 		if (!$guid) {
 			return false;
 		}
 		
-		if (!elgg_trigger_event('delete', $this->type, $this)) {
+		// first check if we can delete this entity
+		// NOTE: in Elgg <= 1.10.3 this was after the delete event,
+		// which could potentially remove some content if the user didn't have access
+		if (!$this->canDelete()) {
 			return false;
 		}
-		
-		if (!$this->canEdit()) {
+
+		// now trigger an event to let others know this entity is about to be deleted
+		// so they can prevent it or take their own actions
+		if (!_elgg_services()->events->trigger('delete', $this->type, $this)) {
 			return false;
 		}
 
-
-		global $CONFIG, $ENTITY_CACHE;
-
-		// delete cache
-		if (isset($ENTITY_CACHE[$guid])) {
-			invalidate_cache_for_entity($guid);
+		if ($this instanceof ElggUser) {
+			// ban to prevent using the site during delete
+			_elgg_services()->usersTable->markBanned($this->guid, true);
 		}
-		
+
+		_elgg_services()->entityCache->remove($guid);
+
 		// If memcache is available then delete this entry from the cache
 		static $newentity_cache;
 		if ((!$newentity_cache) && (is_memcache_available())) {
-			$newentity_cache = new ElggMemcache('new_entity_cache');
+			$newentity_cache = new \ElggMemcache('new_entity_cache');
 		}
 		if ($newentity_cache) {
 			$newentity_cache->delete($guid);
@@ -1762,19 +1952,14 @@ abstract class ElggEntity extends ElggData implements
 
 		// Delete contained owned and otherwise releated objects (depth first)
 		if ($recursive) {
-			// Temporary token overriding access controls
-			// @todo Do this better.
-			static $__RECURSIVE_DELETE_TOKEN;
-			// Make it slightly harder to guess
-			$__RECURSIVE_DELETE_TOKEN = md5(elgg_get_logged_in_user_guid());
-
+			// Temporarily overriding access controls
 			$entity_disable_override = access_get_show_hidden_status();
 			access_show_hidden_entities(true);
 			$ia = elgg_set_ignore_access(true);
 
 			// @todo there was logic in the original code that ignored
 			// entities with owner or container guids of themselves.
-			// this should probably be prevented in ElggEntity instead of checked for here
+			// this should probably be prevented in \ElggEntity instead of checked for here
 			$options = array(
 				'wheres' => array(
 					"((container_guid = $guid OR owner_guid = $guid OR site_guid = $guid)"
@@ -1783,7 +1968,7 @@ abstract class ElggEntity extends ElggData implements
 				'limit' => 0
 			);
 
-			$batch = new ElggBatch('elgg_get_entities', $options);
+			$batch = new \ElggBatch('elgg_get_entities', $options);
 			$batch->setIncrementOffset(false);
 
 			foreach ($batch as $e) {
@@ -1791,47 +1976,78 @@ abstract class ElggEntity extends ElggData implements
 			}
 
 			access_show_hidden_entities($entity_disable_override);
-			$__RECURSIVE_DELETE_TOKEN = null;
 			elgg_set_ignore_access($ia);
 		}
 
+		$entity_disable_override = access_get_show_hidden_status();
+		access_show_hidden_entities(true);
+		$ia = elgg_set_ignore_access(true);
+		
 		// Now delete the entity itself
 		$this->deleteMetadata();
 		$this->deleteOwnedMetadata();
 		$this->deleteAnnotations();
 		$this->deleteOwnedAnnotations();
 		$this->deleteRelationships();
+		$this->deleteAccessCollectionMemberships();
+		$this->deleteOwnedAccessCollections();
+
+		access_show_hidden_entities($entity_disable_override);
+		elgg_set_ignore_access($ia);
 
 		elgg_delete_river(array('subject_guid' => $guid));
 		elgg_delete_river(array('object_guid' => $guid));
+		elgg_delete_river(array('target_guid' => $guid));
 		remove_all_private_settings($guid);
 
-		$res = $this->getDatabase()->deleteData("DELETE from {$CONFIG->dbprefix}entities where guid={$guid}");
-		if ($res) {
-			$sub_table = "";
+		$res = $this->getDatabase()->deleteData("
+			DELETE FROM {$CONFIG->dbprefix}entities
+			WHERE guid = $guid
+		");
 
-			// Where appropriate delete the sub table
-			switch ($this->type) {
-				case 'object' :
-					$sub_table = $CONFIG->dbprefix . 'objects_entity';
-					break;
-				case 'user' :
-					$sub_table = $CONFIG->dbprefix . 'users_entity';
-					break;
-				case 'group' :
-					$sub_table = $CONFIG->dbprefix . 'groups_entity';
-					break;
-				case 'site' :
-					$sub_table = $CONFIG->dbprefix . 'sites_entity';
-					break;
-			}
+		if ($res && in_array($this->type, ['object', 'user', 'group', 'site'])) {
+			// delete from secondary table
+			$sub_table = "{$CONFIG->dbprefix}{$this->type}s_entity";
 
-			if ($sub_table) {
-				$this->getDatabase()->deleteData("DELETE from $sub_table where guid={$guid}");
-			}
+			$this->getDatabase()->deleteData("
+				DELETE FROM $sub_table
+				WHERE guid = $guid
+			");
 		}
+		
+		_elgg_clear_entity_files($this);
 
 		return (bool)$res;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	public function toObject() {
+		$object = $this->prepareObject(new \stdClass());
+		$params = array('entity' => $this);
+		$object = _elgg_services()->hooks->trigger('to:object', 'entity', $params, $object);
+		return $object;
+	}
+
+	/**
+	 * Prepare an object copy for toObject()
+	 *
+	 * @param \stdClass $object Object representation of the entity
+	 * @return \stdClass
+	 */
+	protected function prepareObject($object) {
+		$object->guid = $this->guid;
+		$object->type = $this->getType();
+		$object->subtype = $this->getSubtype();
+		$object->owner_guid = $this->getOwnerGUID();
+		$object->container_guid = $this->getContainerGUID();
+		$object->site_guid = (int)$this->site_guid;
+		$object->time_created = date('c', $this->getTimeCreated());
+		$object->time_updated = date('c', $this->getTimeUpdated());
+		$object->url = $this->getURL();
+		$object->read_access = (int)$this->access_id;
+		return $object;
 	}
 
 	/*
@@ -1850,15 +2066,12 @@ abstract class ElggEntity extends ElggData implements
 	/**
 	 * Sets the 'location' metadata for the entity
 	 *
-	 * @todo Unimplemented
-	 *
 	 * @param string $location String representation of the location
 	 *
-	 * @return bool
+	 * @return void
 	 */
 	public function setLocation($location) {
 		$this->location = $location;
-		return true;
 	}
 
 	/**
@@ -1867,14 +2080,12 @@ abstract class ElggEntity extends ElggData implements
 	 * @param float $lat  Latitude
 	 * @param float $long Longitude
 	 *
-	 * @return bool
+	 * @return void
 	 * @todo Unimplemented
 	 */
 	public function setLatLong($lat, $long) {
-		$this->set('geo:lat', $lat);
-		$this->set('geo:long', $long);
-
-		return true;
+		$this->{"geo:lat"} = $lat;
+		$this->{"geo:long"} = $long;
 	}
 
 	/**
@@ -1884,70 +2095,17 @@ abstract class ElggEntity extends ElggData implements
 	 * @todo Unimplemented
 	 */
 	public function getLatitude() {
-		return (float)$this->get('geo:lat');
+		return (float)$this->{"geo:lat"};
 	}
 
 	/**
 	 * Return the entity's longitude
 	 *
 	 * @return float
+	 * @todo Unimplemented
 	 */
 	public function getLongitude() {
-		return (float)$this->get('geo:long');
-	}
-
-	/*
-	 * NOTABLE INTERFACE
-	 */
-
-	/**
-	 * Set the time and duration of an object
-	 *
-	 * @param int $hour     If ommitted, now is assumed.
-	 * @param int $minute   If ommitted, now is assumed.
-	 * @param int $second   If ommitted, now is assumed.
-	 * @param int $day      If ommitted, now is assumed.
-	 * @param int $month    If ommitted, now is assumed.
-	 * @param int $year     If ommitted, now is assumed.
-	 * @param int $duration Duration of event, remainder of the day is assumed.
-	 *
-	 * @return true
-	 * @todo Unimplemented
-	 */
-	public function setCalendarTimeAndDuration($hour = NULL, $minute = NULL, $second = NULL,
-	$day = NULL, $month = NULL, $year = NULL, $duration = NULL) {
-
-		$start = mktime($hour, $minute, $second, $month, $day, $year);
-		$end = $start + abs($duration);
-		if (!$duration) {
-			$end = get_day_end($day, $month, $year);
-		}
-
-		$this->calendar_start = $start;
-		$this->calendar_end = $end;
-
-		return true;
-	}
-
-	/**
-	 * Returns the start timestamp.
-	 *
-	 * @return int
-	 * @todo Unimplemented
-	 */
-	public function getCalendarStartTime() {
-		return (int)$this->calendar_start;
-	}
-
-	/**
-	 * Returns the end timestamp.
-	 *
-	 * @todo Unimplemented
-	 *
-	 * @return int
-	 */
-	public function getCalendarEndTime() {
-		return (int)$this->calendar_end;
+		return (float)$this->{"geo:long"};
 	}
 
 	/*
@@ -1958,8 +2116,10 @@ abstract class ElggEntity extends ElggData implements
 	 * Returns an array of fields which can be exported.
 	 *
 	 * @return array
+	 * @deprecated 1.9 Use toObject()
 	 */
 	public function getExportableValues() {
+		elgg_deprecated_notice(__METHOD__ . ' has been deprecated by toObject()', 1.9);
 		return array(
 			'guid',
 			'type',
@@ -1978,8 +2138,10 @@ abstract class ElggEntity extends ElggData implements
 	 * $this->attributes (shouldn't happen)
 	 *
 	 * @return array
+	 * @deprecated 1.9
 	 */
 	public function export() {
+		elgg_deprecated_notice(__METHOD__ . ' has been deprecated', 1.9);
 		$tmp = array();
 
 		// Generate uuid
@@ -1998,7 +2160,7 @@ abstract class ElggEntity extends ElggData implements
 
 		// Now add its attributes
 		foreach ($this->attributes as $k => $v) {
-			$meta = NULL;
+			$meta = null;
 
 			if (in_array($k, $exportable_values)) {
 				switch ($k) {
@@ -2063,13 +2225,17 @@ abstract class ElggEntity extends ElggData implements
 	/**
 	 * Import data from an parsed ODD xml data array.
 	 *
-	 * @param array $data XML data
+	 * @param ODD $data XML data
 	 *
 	 * @return true
+	 *
+	 * @throws InvalidParameterException
+	 * @deprecated 1.9 Use toObject()
 	 */
 	public function import(ODD $data) {
+		elgg_deprecated_notice(__METHOD__ . ' has been deprecated', 1.9);
 		if (!($data instanceof ODDEntity)) {
-			throw new InvalidParameterException(elgg_echo('InvalidParameterException:UnexpectedODDClass'));
+			throw new \InvalidParameterException("import() passed an unexpected ODD class");
 		}
 
 		// Set type and subtype
@@ -2077,7 +2243,7 @@ abstract class ElggEntity extends ElggData implements
 		$this->attributes['subtype'] = $data->getAttribute('subclass');
 
 		// Set owner
-		$this->attributes['owner_guid'] = elgg_get_logged_in_user_guid(); // Import as belonging to importer.
+		$this->attributes['owner_guid'] = _elgg_services()->session->getLoggedInUserGuid(); // Import as belonging to importer.
 
 		// Set time
 		$this->attributes['time_created'] = strtotime($data->getAttribute('published'));
@@ -2102,15 +2268,9 @@ abstract class ElggEntity extends ElggData implements
 
 	/**
 	 * For a given ID, return the object associated with it.
-	 * This is used by the river functionality primarily.
-	 *
-	 * This is useful for checking access permissions etc on objects.
+	 * This is used by the system log. It can be called on any Loggable object.
 	 *
 	 * @param int $id GUID.
-	 *
-	 * @todo How is this any different or more useful than get_entity($guid)
-	 * or new ElggEntity($guid)?
-	 *
 	 * @return int GUID
 	 */
 	public function getObjectFromID($id) {
@@ -2126,9 +2286,7 @@ abstract class ElggEntity extends ElggData implements
 	 *
 	 * @return array
 	 */
-	public function getTags($tag_names = NULL) {
-		global $CONFIG;
-
+	public function getTags($tag_names = null) {
 		if ($tag_names && !is_array($tag_names)) {
 			$tag_names = array($tag_names);
 		}
@@ -2153,5 +2311,63 @@ abstract class ElggEntity extends ElggData implements
 		}
 
 		return $entity_tags;
+	}
+	
+	/**
+	 * Remove the membership of all access collections for this entity (if the entity is a user)
+	 *
+	 * @return bool
+	 * @since 1.11
+	 */
+	public function deleteAccessCollectionMemberships() {
+	
+		if (!$this->guid) {
+			return false;
+		}
+		
+		if ($this->type !== 'user') {
+			return true;
+		}
+		
+		$ac = _elgg_services()->accessCollections;
+		
+		$collections = $ac->getCollectionsByMember($this->guid);
+		if (empty($collections)) {
+			return true;
+		}
+		
+		$result = true;
+		foreach ($collections as $collection) {
+			$result = $result & $ac->removeUser($this->guid, $collection->id);
+		}
+		
+		return $result;
+	}
+	
+	/**
+	 * Remove all access collections owned by this entity
+	 *
+	 * @return bool
+	 * @since 1.11
+	 */
+	public function deleteOwnedAccessCollections() {
+		
+		if (!$this->guid) {
+			return false;
+		}
+		
+		$ac = _elgg_services()->accessCollections;
+		
+		$collections = $ac->getEntityCollections($this->guid);
+		if (empty($collections)) {
+			return true;
+		}
+		
+		$result = true;
+		foreach ($collections as $collection) {
+			$result = $result & $ac->delete($collection->id);
+		}
+		
+		return $result;
 	}
 }

@@ -1,10 +1,4 @@
 <?php
-/**
-* Elgg send a message action page
-* 
-* @package ElggMessages
-*/
-
 return array(
 	/**
 	* Menu items and titles
@@ -16,24 +10,18 @@ return array(
 	'messages:user' => "%s's inbox",
 	'messages:posttitle' => "%s's messages: %s",
 	'messages:inbox' => "Inbox",
-	'messages:send' => "Send",
 	'messages:sent' => "Sent",
 	'messages:message' => "Message",
 	'messages:title' => "Subject",
-	'messages:to' => "To",
 	'messages:to:help' => "Write recipient's username here.",
-	'messages:from' => "From",
-	'messages:fly' => "Send",
 	'messages:replying' => "Message replying to",
 	'messages:inbox' => "Inbox",
 	'messages:sendmessage' => "Send a message",
-	'messages:compose' => "Compose a message",
 	'messages:add' => "Compose a message",
 	'messages:sentmessages' => "Sent messages",
 	'messages:recent' => "Recent messages",
 	'messages:original' => "Original message",
 	'messages:yours' => "Your message",
-	'messages:answer' => "Reply",
 	'messages:toggle' => 'Toggle all',
 	'messages:markread' => 'Mark read',
 	'messages:recipient' => 'Choose a recipient&hellip;',
@@ -77,7 +65,7 @@ return array(
 
 	%s
 
-	You cannot reply to this email.",
+	Please do not reply to this email.",
 
 	/**
 	* Error messages
@@ -90,6 +78,7 @@ return array(
 	'messages:nomessages' => "There are no messages.",
 	'messages:user:nonexist' => "We could not find the recipient in the user database.",
 	'messages:user:blank' => "You did not select someone to send this to.",
+	'messages:user:self' => "You cannot send a message to yourself.",
 
 	'messages:deleted_sender' => 'Deleted user',
 

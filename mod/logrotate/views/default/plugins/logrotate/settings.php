@@ -13,7 +13,7 @@ if (!$period) {
 
 if (!$delete) {
 	$delete = 'monthly';
-}		
+}
 ?>
 <div>
 	<?php
@@ -22,9 +22,9 @@ if (!$delete) {
 		echo elgg_view('input/select', array(
 			'name' => 'params[period]',
 			'options_values' => array(
-				'weekly' => elgg_echo('logrotate:weekly'),
-				'monthly' => elgg_echo('logrotate:monthly'),
-				'yearly' => elgg_echo('logrotate:yearly'),
+				'weekly' => elgg_echo('interval:weekly'),
+				'monthly' => elgg_echo('interval:monthly'),
+				'yearly' => elgg_echo('interval:yearly'),
 			),
 			'value' => $period,
 		));
@@ -40,6 +40,7 @@ if (!$delete) {
 				'weekly' => elgg_echo('logrotate:week'),
 				'monthly' => elgg_echo('logrotate:month'),
 				'yearly' => elgg_echo('logrotate:year'),
+				'never' => elgg_echo('logrotate:never'),
 			),
 			'value' => $delete,
 		));

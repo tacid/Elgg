@@ -51,15 +51,7 @@ interface Loggable {
 	 *
 	 * @param int $id GUID of an entity
 	 *
-	 * @return ElggEntity
+	 * @return \ElggEntity
 	 */
 	public function getObjectFromID($id);
-
-	/**
-	 * Return the GUID of the owner of this object.
-	 *
-	 * @return int
-	 * @deprecated 1.8 Use getOwnerGUID() instead
-	 */
-	public function getObjectOwnerGUID();
 }

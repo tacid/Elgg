@@ -19,51 +19,7 @@
  * or the original language string.
  */
 function elgg_echo($message_key, $args = array(), $language = "") {
-	global $CONFIG;
-
-	static $CURRENT_LANGUAGE;
-
-	// old param order is deprecated
-	if (!is_array($args)) {
-		elgg_deprecated_notice(
-			'As of Elgg 1.8, the 2nd arg to elgg_echo() is an array of string replacements and the 3rd arg is the language.',
-			1.8
-		);
-
-		$language = $args;
-		$args = array();
-	}
-
-	if (!isset($CONFIG->translations)) {
-		// this means we probably had an exception before translations were initialized
-		register_translations(dirname(dirname(dirname(__FILE__))) . "/languages/");
-	}
-
-	if (!$CURRENT_LANGUAGE) {
-		$CURRENT_LANGUAGE = get_language();
-	}
-	if (!$language) {
-		$language = $CURRENT_LANGUAGE;
-	}
-
-	if (isset($CONFIG->translations[$language][$message_key])) {
-		$string = $CONFIG->translations[$language][$message_key];
-	} else if (isset($CONFIG->translations["en"][$message_key])) {
-		$string = $CONFIG->translations["en"][$message_key];
-		$lang = $CONFIG->translations["en"][$language];
-		elgg_log(sprintf('Missing %s translation for "%s" language key', $lang, $message_key), 'NOTICE');
-	} else {
-		$string = $message_key;
-		elgg_log(sprintf('Missing English translation for "%s" language key', $message_key), 'NOTICE');
-	}
-
-	// only pass through if we have arguments to allow backward compatibility
-	// with manual sprintf() calls.
-	if ($args) {
-		$string = vsprintf($string, $args);
-	}
-
-	return $string;
+	return _elgg_services()->translator->translate($message_key, $args, $language);
 }
 
 /**
@@ -77,98 +33,29 @@ function elgg_echo($message_key, $args = array(), $language = "") {
  * @param string $country_code   Standard country code (eg 'en', 'nl', 'es')
  * @param array  $language_array Formatted array of strings
  *
- * @return true|false Depending on success
+ * @return bool Depending on success
  */
 function add_translation($country_code, $language_array) {
-	global $CONFIG;
-	if (!isset($CONFIG->translations)) {
-		$CONFIG->translations = array();
-	}
-
-	$country_code = strtolower($country_code);
-	$country_code = trim($country_code);
-	if (is_array($language_array) && sizeof($language_array) > 0 && $country_code != "") {
-		if (!isset($CONFIG->translations[$country_code])) {
-			$CONFIG->translations[$country_code] = $language_array;
-		} else {
-			$CONFIG->translations[$country_code] = $language_array + $CONFIG->translations[$country_code];
-		}
-		return true;
-	}
-	return false;
+	return _elgg_services()->translator->addTranslation($country_code, $language_array);
 }
 
 /**
- * Detect the current language being used by the current site or logged in user.
+ * Get the current system/user language or "en".
  *
  * @return string The language code for the site/user or "en" if not set
  */
 function get_current_language() {
-	global $CONFIG;
-
-	$language = get_language();
-
-	if (!$language) {
-		$language = 'en';
-	}
-
-	return $language;
+	return _elgg_services()->translator->getCurrentLanguage();
 }
 
 /**
- * Gets the current language in use by the system or user.
+ * Detect the current system/user language or false.
  *
  * @return string The language code (eg "en") or false if not set
  */
 function get_language() {
-	global $CONFIG;
-
-	$user = elgg_get_logged_in_user_entity();
-	$language = false;
-
-	if (($user) && ($user->language)) {
-		$language = $user->language;
-	}
-
-	if ((!$language) && (isset($CONFIG->language)) && ($CONFIG->language)) {
-		$language = $CONFIG->language;
-	}
-
-	if ($language) {
-		return $language;
-	}
-
-	return false;
+	return _elgg_services()->translator->detectLanguage();
 }
-
-function _elgg_load_translations() {
-	global $CONFIG;
-
-	if ($CONFIG->system_cache_enabled) {
-		$loaded = true;
-		$languages = array_unique(array('en', get_current_language()));
-		foreach ($languages as $language) {
-			$data = elgg_load_system_cache("$language.php");
-			if ($data) {
-				add_translation($language, unserialize($data));
-			} else {
-				$loaded = false;
-			}
-		}
-
-		if ($loaded) {
-			$CONFIG->i18n_loaded_from_cache = true;
-			// this is here to force 
-			$CONFIG->language_paths[dirname(dirname(dirname(__FILE__))) . "/languages/"] = true;
-			return;
-		}
-	}
-
-	// load core translations from languages directory
-	register_translations(dirname(dirname(dirname(__FILE__))) . "/languages/");
-}
-
-
 
 /**
  * When given a full path, finds translation files and loads them
@@ -176,82 +63,25 @@ function _elgg_load_translations() {
  * @param string $path     Full path
  * @param bool   $load_all If true all languages are loaded, if
  *                         false only the current language + en are loaded
+ * @param string $language Language code if other than current + en
  *
- * @return void
+ * @return bool success
  */
-function register_translations($path, $load_all = false) {
-	global $CONFIG;
-
-	$path = sanitise_filepath($path);
-
-	// Make a note of this path just incase we need to register this language later
-	if (!isset($CONFIG->language_paths)) {
-		$CONFIG->language_paths = array();
-	}
-	$CONFIG->language_paths[$path] = true;
-
-	// Get the current language based on site defaults and user preference
-	$current_language = get_current_language();
-	elgg_log("Translations loaded from: $path");
-
-	// only load these files unless $load_all is true.
-	$load_language_files = array(
-		'en.php',
-		"$current_language.php"
-	);
-
-	$load_language_files = array_unique($load_language_files);
-
-	$handle = opendir($path);
-	if (!$handle) {
-		elgg_log("Could not open language path: $path", 'ERROR');
-		return false;
-	}
-
-	$return = true;
-	while (false !== ($language = readdir($handle))) {
-		// ignore bad files
-		if (substr($language, 0, 1) == '.' || substr($language, -4) !== '.php') {
-			continue;
-		}
-
-		if (in_array($language, $load_language_files) || $load_all) {
-			$result = include_once($path . $language);
-			if (!$result) {
-				$return = false;
-				continue;
-			} elseif (is_array($result)) {
-				add_translation(basename($language, '.php'), $result);	
-			}
-		}
-	}
-
-	return $return;
+function register_translations($path, $load_all = false, $language = null) {
+	return _elgg_services()->translator->registerTranslations($path, $load_all, $language);
 }
 
 /**
  * Reload all translations from all registered paths.
  *
- * This is only called by functions which need to know all possible translations, namely the
- * statistic gathering ones.
+ * This is only called by functions which need to know all possible translations.
  *
  * @todo Better on demand loading based on language_paths array
  *
- * @return bool
+ * @return void
  */
 function reload_all_translations() {
-	global $CONFIG;
-
-	static $LANG_RELOAD_ALL_RUN;
-	if ($LANG_RELOAD_ALL_RUN) {
-		return null;
-	}
-
-	foreach ($CONFIG->language_paths as $path => $dummy) {
-		register_translations($path, true);
-	}
-
-	$LANG_RELOAD_ALL_RUN = true;
+	return _elgg_services()->translator->reloadAllTranslations();
 }
 
 /**
@@ -261,24 +91,7 @@ function reload_all_translations() {
  * @return array
  */
 function get_installed_translations() {
-	global $CONFIG;
-
-	// Ensure that all possible translations are loaded
-	reload_all_translations();
-
-	$installed = array();
-
-	foreach ($CONFIG->translations as $k => $v) {
-		$installed[$k] = elgg_echo($k, array(), $k);
-		if (elgg_is_admin_logged_in()) {
-			$completeness = get_language_completeness($k);
-			if (($completeness < 100) && ($k != 'en')) {
-				$installed[$k] .= " (" . $completeness . "% " . elgg_echo('complete') . ")";
-			}
-		}
-	}
-
-	return $installed;
+	return _elgg_services()->translator->getInstalledTranslations();
 }
 
 /**
@@ -289,26 +102,7 @@ function get_installed_translations() {
  * @return int
  */
 function get_language_completeness($language) {
-	global $CONFIG;
-
-	// Ensure that all possible translations are loaded
-	reload_all_translations();
-
-	$language = sanitise_string($language);
-
-	$en = count($CONFIG->translations['en']);
-
-	$missing = get_missing_language_keys($language);
-	if ($missing) {
-		$missing = count($missing);
-	} else {
-		$missing = 0;
-	}
-
-	//$lang = count($CONFIG->translations[$language]);
-	$lang = $en - $missing;
-
-	return round(($lang / $en) * 100, 2);
+	return _elgg_services()->translator->getLanguageCompleteness($language);
 }
 
 /**
@@ -320,34 +114,24 @@ function get_language_completeness($language) {
  * @return mixed
  */
 function get_missing_language_keys($language) {
-	global $CONFIG;
-
-	// Ensure that all possible translations are loaded
-	reload_all_translations();
-
-	$missing = array();
-
-	foreach ($CONFIG->translations['en'] as $k => $v) {
-		if ((!isset($CONFIG->translations[$language][$k]))
-		|| ($CONFIG->translations[$language][$k] == $CONFIG->translations['en'][$k])) {
-			$missing[] = $k;
-		}
-	}
-
-	if (count($missing)) {
-		return $missing;
-	}
-
-	return false;
+	return _elgg_services()->translator->getMissingLanguageKeys($language);
 }
 
 /**
- * Initialize the language library
- * @access private
+ * Check if a given language key exists.
+ *
+ * @note Translators should, whenever creating a "dynamically" named language key, always create an
+ *       English (fallback) translation as well.
+ *
+ * @param string $key      The translation key
+ * @param string $language The language. Provided an English translation exists for all created keys, then
+ *                         devs can generally use the default "en", regardless of the site/user language.
+ *
+ * @return bool
+ * @since 1.11
  */
-function elgg_languages_init() {
-	$lang = get_current_language();
-	elgg_register_simplecache_view("js/languages/$lang");
+function elgg_language_key_exists($key, $language = 'en') {
+	return _elgg_services()->translator->languageKeyExists($key, $language);
 }
 
-elgg_register_event_handler('init', 'system', 'elgg_languages_init');
+return function(\Elgg\EventsService $events) {};

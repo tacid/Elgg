@@ -7,60 +7,19 @@
  * @subpackage Autoloader
  */
 
-_elgg_setup_autoload();
-
 /**
- * Setup global class map and loader instances and add the core classes to the map.
- * We can't load this from dataroot because we don't know it yet, and we'll need
- * several classes before we can find out!
+ * Get the global service provider
  *
- * @throws InstallationException
+ * @param \Elgg\Di\ServiceProvider $services Elgg service provider. This must be set by the application.
+ * @return \Elgg\Di\ServiceProvider
  * @access private
  */
-function _elgg_setup_autoload() {
-	global $CONFIG;
-
-	// manually load classes needed for autoloading
-	$dir = dirname(dirname(__FILE__)) . '/classes';
-	foreach (array('ElggClassMap', 'ElggClassLoader', 'ElggAutoloadManager') as $class) {
-		$file = "{$dir}/{$class}.php";
-		if (!include $file) {
-			throw new InstallationException("Could not load {$file}");
-		}
+function _elgg_services(\Elgg\Di\ServiceProvider $services = null) {
+	static $inst;
+	if ($services !== null) {
+		$inst = $services;
 	}
-
-	$loader = new ElggClassLoader(new ElggClassMap());
-	// until the cache can be loaded, just setup PSR-0 autoloading
-	// out of the classes directory. No need to build a full map.
-	$loader->addFallback($dir);
-	$loader->register();
-	$manager = new ElggAutoloadManager($loader);
-
-	$CONFIG->autoload_manager = $manager;
-}
-
-/**
- * Load cached data into the autoload system
- *
- * Note this has to wait until Elgg's data path is known.
- *
- * @access private
- */
-function _elgg_load_autoload_cache() {
-	$manager = _elgg_get_autoload_manager();
-	$manager->setStorage(elgg_get_system_cache());
-	if (! $manager->loadCache()) {
-		$manager->addClasses(dirname(dirname(__FILE__)) . '/classes');
-	}
-}
-
-/**
- * Save the autoload system cache
- *
- * @access private
- */
-function _elgg_save_autoload_cache() {
-	_elgg_get_autoload_manager()->saveCache();
+	return $inst;
 }
 
 /**
@@ -69,37 +28,24 @@ function _elgg_save_autoload_cache() {
  * @access private
  */
 function _elgg_delete_autoload_cache() {
-	_elgg_get_autoload_manager()->deleteCache();
-}
-
-/**
- * Get Elgg's autoload manager instance
- *
- * @return ElggAutoloadManager
- * @access private
- */
-function _elgg_get_autoload_manager() {
-	global $CONFIG;
-	return $CONFIG->autoload_manager;
+	_elgg_services()->autoloadManager->deleteCache();
 }
 
 /**
  * Get Elgg's class loader
  *
- * @return ElggClassLoader
+ * @return \Elgg\ClassLoader
  */
 function elgg_get_class_loader() {
-	global $CONFIG;
-	return $CONFIG->autoload_manager->getLoader();
+	return _elgg_services()->classLoader;
 }
 
 /**
- * Recursively scan $dir and register the classes/interfaces/traits found
- * within for autoloading.
+ * Register a directory tree for autoloading classes/interfaces/traits.
  *
- * ElggClassScanner is used, so the files do not need to follow any particular
- * naming/structure conventions, and the scan is only performed on the first
- * request.
+ * For BC with 1.8, all .php files in the top-level directory are scanned
+ * and added to the class map (only on the first request), then lower-level
+ * directories are registered for standard PSR-0 autoloading.
  *
  * @param string $dir The dir to look in
  *
@@ -107,7 +53,7 @@ function elgg_get_class_loader() {
  * @since 1.8.0
  */
 function elgg_register_classes($dir) {
-	_elgg_get_autoload_manager()->addClasses($dir);
+	_elgg_services()->autoloadManager->addClasses($dir);
 }
 
 /**
@@ -120,6 +66,10 @@ function elgg_register_classes($dir) {
  * @since 1.8.0
  */
 function elgg_register_class($class, $location) {
-	_elgg_get_autoload_manager()->setClassPath($class, $location);
+	_elgg_services()->autoloadManager->setClassPath($class, $location);
 	return true;
 }
+
+return function(\Elgg\EventsService $events, \Elgg\HooksRegistrationService $hooks) {
+	$events->registerHandler('upgrade', 'all', '_elgg_delete_autoload_cache', 600);
+};

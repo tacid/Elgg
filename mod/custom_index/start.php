@@ -1,30 +1,16 @@
 <?php
 /**
  * Elgg demo custom index page plugin
- * 
  */
 
 elgg_register_event_handler('init', 'system', 'custom_index_init');
 
 function custom_index_init() {
 
-	// Extend system CSS with our own styles
-	elgg_extend_view('css/elgg', 'custom_index/css');
-
-	// Replace the default index page
-	elgg_register_plugin_hook_handler('index', 'system', 'custom_index');
-}
-
-function custom_index($hook, $type, $return, $params) {
-	if ($return == true) {
-		// another hook has already replaced the front page
-		return $return;
-	}
-
-	if (!include_once(dirname(__FILE__) . "/index.php")) {
-		return false;
-	}
-
-	// return true to signify that we have handled the front page
-	return true;
+	// TODO(ewinslow): Want to just call elgg_load_css('./index.css') in
+	// the index.php view, but can't because:
+	//   1. Elgg can only load CSS from views in the css/* folder.
+	//   2. Elgg can't do relative css inclusion.
+	// Fix this.
+	elgg_extend_view('elgg.css', 'resources/index.css');
 }

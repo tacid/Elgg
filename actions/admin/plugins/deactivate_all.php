@@ -10,24 +10,36 @@
  */
 
 $guids = get_input('guids');
-$guids = explode(',', $guids);
 
-foreach ($guids as $guid) {
-	$plugin = get_entity($guid);
-	if ($plugin->isActive()) {
-		if ($plugin->deactivate()) {
-			//system_message(elgg_echo('admin:plugins:activate:yes', array($plugin->getManifest()->getName())));
-		} else {
-			$msg = $plugin->getError();
-			$string = ($msg) ? 'admin:plugins:deactivate:no_with_msg' : 'admin:plugins:deactivate:no';
-			register_error(elgg_echo($string, array($plugin->getFriendlyName(), $plugin->getError())));
-		}
+if (empty($guids)) {
+	$plugins = elgg_get_plugins('active');
+} else {
+	$plugins = elgg_get_entities([
+		'type' => 'object',
+		'subtype' => 'plugin',
+		'guids' => explode(',', $guids),
+		'limit' => false
+	]);
+}
+
+if (empty($plugins)) {
+	forward(REFERER);
+}
+
+foreach ($plugins as $plugin) {
+	if (!$plugin->isActive()) {
+		continue;
+	}
+	
+	if (!$plugin->deactivate()) {
+		$msg = $plugin->getError();
+		$string = ($msg) ? 'admin:plugins:deactivate:no_with_msg' : 'admin:plugins:deactivate:no';
+		register_error(elgg_echo($string, array($plugin->getFriendlyName(), $plugin->getError())));
 	}
 }
 
 // don't regenerate the simplecache because the plugin won't be
 // loaded until next run.  Just invalidate and let it regnerate as needed
-elgg_invalidate_simplecache();
-elgg_reset_system_cache();
+elgg_flush_caches();
 
 forward(REFERER);

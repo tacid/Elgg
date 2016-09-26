@@ -10,24 +10,26 @@
 /**
  * Retrieve the system log based on a number of parameters.
  *
+ * @todo too many args, and the first arg is too confusing
+ *
  * @param int|array $by_user    The guid(s) of the user(s) who initiated the event.
  *                              Use 0 for unowned entries. Anything else falsey means anyone.
  * @param string    $event      The event you are searching on.
  * @param string    $class      The class of object it effects.
  * @param string    $type       The type
  * @param string    $subtype    The subtype.
- * @param int       $limit      Maximum number of responses to return.
+ * @param int       $limit      Maximum number of responses to return. (default from settings)
  * @param int       $offset     Offset of where to start.
  * @param bool      $count      Return count or not
  * @param int       $timebefore Lower time limit
  * @param int       $timeafter  Upper time limit
  * @param int       $object_id  GUID of an object
- * @param str       $ip_address The IP address.
+ * @param string    $ip_address The IP address.
  * @return mixed
  */
-function get_system_log($by_user = "", $event = "", $class = "", $type = "", $subtype = "",
-$limit = 10, $offset = 0, $count = false, $timebefore = 0, $timeafter = 0, $object_id = 0,
-$ip_address = false) {
+function get_system_log($by_user = "", $event = "", $class = "", $type = "", $subtype = "", $limit = null,
+						$offset = 0, $count = false, $timebefore = 0, $timeafter = 0, $object_id = 0,
+						$ip_address = "") {
 
 	global $CONFIG;
 
@@ -45,6 +47,9 @@ $ip_address = false) {
 	$type = sanitise_string($type);
 	$subtype = sanitise_string($subtype);
 	$ip_address = sanitise_string($ip_address);
+	if ($limit === null) {
+		$limit = elgg_get_config('default_limit');
+	}
 	$limit = (int)$limit;
 	$offset = (int)$offset;
 
@@ -127,27 +132,51 @@ function get_log_entry($entry_id) {
 /**
  * Return the object referred to by a given log entry
  *
- * @param int $entry_id The log entry
+ * @param \stdClass|int $entry The log entry row or its ID
  *
  * @return mixed
  */
-function get_object_from_log_entry($entry_id) {
-	$entry = get_log_entry($entry_id);
-
-	if ($entry) {
-		$class = $entry->object_class;
-		// surround with try/catch because object could be disabled
-		try {
-			$object = new $class($entry->object_id);
-		} catch (Exception $e) {
-			
-		}
-		if ($object) {
-			return $object;
+function get_object_from_log_entry($entry) {
+	if (is_numeric($entry)) {
+		$entry = get_log_entry($entry);
+		if (!$entry) {
+			return false;
 		}
 	}
 
-	return false;
+	$class = $entry->object_class;
+	$id = $entry->object_id;
+
+	if (!class_exists($class)) {
+		// failed autoload
+		return false;
+	}
+
+	$getters = array(
+		'ElggAnnotation' => 'elgg_get_annotation_from_id',
+		'ElggMetadata' => 'elgg_get_metadata_from_id',
+		'ElggRelationship' => 'get_relationship',
+	);
+
+	if (isset($getters[$class]) && is_callable($getters[$class])) {
+		$object = call_user_func($getters[$class], $id);
+	} elseif (preg_match('~^Elgg[A-Z]~', $class)) {
+		$object = get_entity($id);
+	} else {
+		// surround with try/catch because object could be disabled
+		try {
+			$object = new $class($entry->object_id);
+			return $object;
+		} catch (Exception $e) {
+			
+		}
+	}
+
+	if (!is_object($object) || get_class($object) !== $class) {
+		return false;
+	}
+
+	return $object;
 }
 
 /**
@@ -166,6 +195,7 @@ function system_log($object, $event) {
 
 	if ($object instanceof Loggable) {
 
+		/* @var \ElggEntity|\ElggExtender $object */
 		if (datalist_get('version') < 2012012000) {
 			// this is a site that doesn't have the ip_address column yet
 			return;
@@ -179,12 +209,15 @@ function system_log($object, $event) {
 
 		// Has loggable interface, extract the necessary information and store
 		$object_id = (int)$object->getSystemLogID();
-		$object_class = $object->getClassName();
+		$object_class = get_class($object);
 		$object_type = $object->getType();
 		$object_subtype = $object->getSubtype();
 		$event = sanitise_string($event);
 		$time = time();
-		$ip_address = sanitise_string($_SERVER['REMOTE_ADDR']);
+		$ip_address = sanitize_string(_elgg_services()->request->getClientIp());
+		if (!$ip_address) {
+			$ip_address = '0.0.0.0';
+		}
 		$performed_by = elgg_get_logged_in_user_guid();
 
 		if (isset($object->access_id)) {
@@ -206,14 +239,14 @@ function system_log($object, $event) {
 
 		// Create log if we haven't already created it
 		if (!isset($log_cache[$time][$object_id][$event])) {
-			$query = "INSERT DELAYED into {$CONFIG->dbprefix}system_log
+			$query = "INSERT into {$CONFIG->dbprefix}system_log
 				(object_id, object_class, object_type, object_subtype, event,
 				performed_by_guid, owner_guid, access_id, enabled, time_created, ip_address)
 			VALUES
 				('$object_id','$object_class','$object_type', '$object_subtype', '$event',
 				$performed_by, $owner_guid, $access_id, '$enabled', '$time', '$ip_address')";
-
-			insert_data($query);
+			
+			execute_delayed_write_query($query);
 
 			$log_cache[$time][$object_id][$event] = true;
 			$cache_size += 1;
@@ -292,8 +325,10 @@ function system_log_listener($event, $object_type, $object) {
 	return true;
 }
 
-/** Register event to listen to all events **/
-elgg_register_event_handler('all', 'all', 'system_log_listener', 400);
+return function(\Elgg\EventsService $events, \Elgg\HooksRegistrationService $hooks) {
+	/** Register event to listen to all events **/
+	$events->registerHandler('all', 'all', 'system_log_listener', 400);
 
-/** Register a default system log handler */
-elgg_register_event_handler('log', 'systemlog', 'system_log_default_logger', 999);
+	/** Register a default system log handler */
+	$events->registerHandler('log', 'systemlog', 'system_log_default_logger', 999);
+};

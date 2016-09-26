@@ -11,22 +11,19 @@
  * @uses $vars['class']    Additional CSS class
  */
 
-if (isset($vars['class'])) {
-	$vars['class'] = "elgg-input-longtext {$vars['class']}";
-} else {
-	$vars['class'] = "elgg-input-longtext";
-}
+$vars['class'] = (array) elgg_extract('class', $vars, []);
+$vars['class'][] = 'elgg-input-longtext';
 
 $defaults = array(
 	'value' => '',
 	'rows' => '10',
 	'cols' => '50',
-	'id' => 'elgg-input-' . rand(), //@todo make this more robust
+	'id' => "elgg-input-" . base_convert(mt_rand(), 10, 36),
 );
 
 $vars = array_merge($defaults, $vars);
 
-$value = $vars['value'];
+$value = htmlspecialchars($vars['value'], ENT_QUOTES, 'UTF-8');
 unset($vars['value']);
 
 echo elgg_view_menu('longtext', array(
@@ -35,8 +32,4 @@ echo elgg_view_menu('longtext', array(
 	'id' => $vars['id'],
 ));
 
-?>
-
-<textarea <?php echo elgg_format_attributes($vars); ?>>
-<?php echo htmlspecialchars($value, ENT_QUOTES, 'UTF-8', false); ?>
-</textarea>
+echo elgg_format_element('textarea', $vars, $value);

@@ -15,7 +15,7 @@
  * @package Elgg
  * @subpackage Test
  */
-class ElggCoreSkeletonTest extends ElggCoreUnitTest {
+class ElggCoreSkeletonTest extends \ElggCoreUnitTest {
 
 	/**
 	 * Called before each test object.
@@ -37,8 +37,7 @@ class ElggCoreSkeletonTest extends ElggCoreUnitTest {
 	 * Called after each test method.
 	 */
 	public function tearDown() {
-		// do not allow SimpleTest to interpret Elgg notices as exceptions
-		$this->swallowErrors();
+
 	}
 
 	/**
@@ -50,6 +49,6 @@ class ElggCoreSkeletonTest extends ElggCoreUnitTest {
 	}
 
 	public function testFailure() {
-		$this->assertTrue(FALSE);
+		$this->assertTrue(false);
 	}
 }

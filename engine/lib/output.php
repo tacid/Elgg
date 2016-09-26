@@ -12,46 +12,38 @@
  *
  * @param string $text The input string
  *
- * @return string The output stirng with formatted links
- **/
+ * @return string The output string with formatted links
+ */
 function parse_urls($text) {
+
+	// URI specification: http://www.ietf.org/rfc/rfc3986.txt
+	// This varies from the specification in the following ways:
+	//  * Supports non-ascii characters
+	//  * Does not allow parentheses and single quotes
+	//  * Cuts off commas, exclamation points, and periods off as last character
+
 	// @todo this causes problems with <attr = "val">
 	// must be in <attr="val"> format (no space).
 	// By default htmlawed rewrites tags to this format.
 	// if PHP supported conditional negative lookbehinds we could use this:
 	// $r = preg_replace_callback('/(?<!=)(?<![ ])?(?<!["\'])((ht|f)tps?:\/\/[^\s\r\n\t<>"\'\!\(\),]+)/i',
-	//
-	// we can put , in the list of excluded char but need to keep . because of domain names.
-	// it is removed in the callback.
-	$r = preg_replace_callback('/(?<!=)(?<!["\'])((ht|f)tps?:\/\/[^\s\r\n\t<>"\'\!\(\),]+)/i',
+	$r = preg_replace_callback('/(?<![=\/"\'])((ht|f)tps?:\/\/[^\s\r\n\t<>"\']+)/i',
 	create_function(
 		'$matches',
 		'
 			$url = $matches[1];
-			$period = \'\';
-			if (substr($url, -1, 1) == \'.\') {
-				$period = \'.\';
-				$url = trim($url, \'.\');
+			$punc = "";
+			$last = substr($url, -1, 1);
+			if (in_array($last, array(".", "!", ",", "(", ")"))) {
+				$punc = $last;
+				$url = rtrim($url, ".!,()");
 			}
 			$urltext = str_replace("/", "/<wbr />", $url);
-			return "<a href=\"$url\">$urltext</a>$period";
+			return "<a href=\"$url\" rel=\"nofollow\">$urltext</a>$punc";
 		'
 	), $text);
 
 	return $r;
-}
-
-/**
- * Create paragraphs from text with line spacing
- *
- * @param string $pee The string
- * @deprecated Use elgg_autop instead
- * @todo Add deprecation warning in 1.9
- *
- * @return string
- **/
-function autop($pee) {
-	return elgg_autop($pee);
 }
 
 /**
@@ -62,7 +54,7 @@ function autop($pee) {
  * @return string
  **/
 function elgg_autop($string) {
-	return ElggAutoP::getInstance()->process($string);
+	return _elgg_services()->autoP->process($string);
 }
 
 /**
@@ -78,28 +70,14 @@ function elgg_autop($string) {
  * @since 1.7.2
  */
 function elgg_get_excerpt($text, $num_chars = 250) {
-	$text = trim(elgg_strip_tags($text));
-	$string_length = elgg_strlen($text);
+	$view = 'output/excerpt';
+	$vars = [
+		'text' => $text,
+		'num_chars' => $num_chars,
+	];
+	$viewtype = elgg_view_exists($view) ? '' : 'default';
 
-	if ($string_length <= $num_chars) {
-		return $text;
-	}
-
-	// handle cases
-	$excerpt = elgg_substr($text, 0, $num_chars);
-	$space = elgg_strrpos($excerpt, ' ', 0);
-
-	// don't crop if can't find a space.
-	if ($space === FALSE) {
-		$space = $num_chars;
-	}
-	$excerpt = trim(elgg_substr($excerpt, 0, $space));
-
-	if ($string_length != elgg_strlen($excerpt)) {
-		$excerpt .= '...';
-	}
-
-	return $excerpt;
+	return _elgg_view_under_viewtype($view, $vars, $viewtype);
 }
 
 /**
@@ -115,91 +93,183 @@ function elgg_format_url($url) {
 }
 
 /**
- * Converts an associative array into a string of well-formed attributes
+ * Format bytes to a human readable format
  *
- * @note usually for HTML, but could be useful for XML too...
+ * @param int $size      File size in bytes to format
  *
- * @param array $attrs An associative array of attr => val pairs
+ * @param int $precision Precision to round formatting bytes to
  *
- * @return string HTML attributes to be inserted into a tag (e.g., <tag $attrs>)
+ * @return string
+ * @since 1.9.0
  */
-function elgg_format_attributes(array $attrs) {
-	$attrs = elgg_clean_vars($attrs);
-	$attributes = array();
-
-	if (isset($attrs['js'])) {
-		//@todo deprecated notice?
-
-		if (!empty($attrs['js'])) {
-			$attributes[] = $attrs['js'];
-		}
-
-		unset($attrs['js']);
+function elgg_format_bytes($size, $precision = 2) {
+	if (!$size || $size < 0) {
+		return false;
 	}
 
+	$base = log($size) / log(1024);
+	$suffixes = array('B', 'kB', 'MB', 'GB', 'TB');
+
+	return round(pow(1024, $base - floor($base)), $precision) . ' ' . $suffixes[floor($base)];
+}
+
+/**
+ * Converts an associative array into a string of well-formed HTML/XML attributes
+ * Returns a concatenated string of HTML attributes to be inserted into a tag (e.g., <tag $attrs>)
+ *
+ * @see elgg_format_element
+ *
+ * @param array $attrs Attributes
+ *                     An array of attribute => value pairs
+ *                     Attribute value can be a scalar value, an array of scalar values, or true
+ *                     <code>
+ *                     $attrs = array(
+ *                         'class' => ['elgg-input', 'elgg-input-text'], // will be imploded with spaces
+ *                         'style' => ['margin-left:10px;', 'color: #666;'], // will be imploded with spaces
+ *                         'alt' => 'Alt text', // will be left as is
+ *                         'disabled' => true, // will be converted to disabled="disabled"
+ *                         'data-options' => json_encode(['foo' => 'bar']), // will be output as an escaped JSON string
+ *                         'batch' => <\ElggBatch>, // will be ignored
+ *                         'items' => [<\ElggObject>], // will be ignored
+ *                     );
+ *                     </code>
+ *
+ * @return string
+ */
+function elgg_format_attributes(array $attrs = array()) {
+	if (!is_array($attrs) || empty($attrs)) {
+		return '';
+	}
+
+	$attributes = [];
+
 	foreach ($attrs as $attr => $val) {
+		if (0 !== strpos($attr, 'data-') && false !== strpos($attr, '_')) {
+			// this is probably a view $vars variable not meant for output
+			continue;
+		}
+
 		$attr = strtolower($attr);
 
-		if ($val === TRUE) {
-			$val = $attr; //e.g. checked => TRUE ==> checked="checked"
+		if (!isset($val) || $val === false) {
+			continue;
 		}
 
-		// ignore $vars['entity'] => ElggEntity stuff
-		if ($val !== NULL && $val !== false && (is_array($val) || !is_object($val))) {
-
-			// allow $vars['class'] => array('one', 'two');
-			// @todo what about $vars['style']? Needs to be semi-colon separated...
-			if (is_array($val)) {
-				$val = implode(' ', $val);
-			}
-
-			$val = htmlspecialchars($val, ENT_QUOTES, 'UTF-8', false);
-			$attributes[] = "$attr=\"$val\"";
+		if ($val === true) {
+			$val = $attr; //e.g. checked => true ==> checked="checked"
 		}
+
+		if (is_scalar($val)) {
+			$val = [$val];
+		}
+
+		if (!is_array($val)) {
+			continue;
+		}
+
+		// Check if array contains non-scalar values and bail if so
+		$filtered_val = array_filter($val, function($e) {
+			return is_scalar($e);
+		});
+
+		if (count($val) != count($filtered_val)) {
+			continue;
+		}
+
+		$val = implode(' ', $val);
+
+		$val = htmlspecialchars($val, ENT_QUOTES, 'UTF-8', false);
+		$attributes[] = "$attr=\"$val\"";
 	}
 
 	return implode(' ', $attributes);
 }
 
 /**
- * Preps an associative array for use in {@link elgg_format_attributes()}.
+ * Format an HTML element
  *
- * Removes all the junk that {@link elgg_view()} puts into $vars.
- * Maintains backward compatibility with attributes like 'internalname' and 'internalid'
+ * @param string|array $tag_name   The element tagName. e.g. "div". This will not be validated.
+ *                                 All function arguments can be given as a single array: The array will be used
+ *                                 as $attributes, except for the keys "#tag_name", "#text", and "#options", which
+ *                                 will be extracted as the other arguments.
  *
- * @note This function is called automatically by elgg_format_attributes(). No need to
- *       call it yourself before using elgg_format_attributes().
+ * @param array        $attributes The element attributes. This is passed to elgg_format_attributes().
  *
- * @param array $vars The raw $vars array with all it's dirtiness (config, url, etc.)
+ * @param string       $text       The contents of the element. Assumed to be HTML unless encode_text is true.
  *
- * @return array The array, ready to be used in elgg_format_attributes().
- * @access private
+ * @param array        $options    Options array with keys:
+ *
+ *   encode_text   => (bool, default false) If true, $text will be HTML-escaped. Already-escaped entities
+ *                    will not be double-escaped.
+ *
+ *   double_encode => (bool, default false) If true, the $text HTML escaping will be allowed to double
+ *                    encode HTML entities: '&times;' will become '&amp;times;'
+ *
+ *   is_void       => (bool) If given, this determines whether the function will return just the open tag.
+ *                    Otherwise this will be determined by the tag name according to this list:
+ *                    http://www.w3.org/html/wg/drafts/html/master/single-page.html#void-elements
+ *
+ *   is_xml        => (bool, default false) If true, void elements will be formatted like "<tag />"
+ *
+ * @return string
+ * @throws InvalidArgumentException
+ * @since 1.9.0
  */
-function elgg_clean_vars(array $vars = array()) {
-	unset($vars['config']);
-	unset($vars['url']);
-	unset($vars['user']);
+function elgg_format_element($tag_name, array $attributes = array(), $text = '', array $options = array()) {
+	if (is_array($tag_name)) {
+		$args = $tag_name;
 
-	// backwards compatibility code
-	if (isset($vars['internalname'])) {
-		$vars['name'] = $vars['internalname'];
-		unset($vars['internalname']);
+		if ($attributes !== [] || $text !== '' || $options !== []) {
+			throw new \InvalidArgumentException('If $tag_name is an array, the other arguments must not be set');
+		}
+
+		if (isset($args['#tag_name'])) {
+			$tag_name = $args['#tag_name'];
+		}
+		if (isset($args['#text'])) {
+			$text = $args['#text'];
+		}
+		if (isset($args['#options'])) {
+			$options = $args['#options'];
+		}
+
+		unset($args['#tag_name'], $args['#text'], $args['#options']);
+		$attributes = $args;
 	}
 
-	if (isset($vars['internalid'])) {
-		$vars['id'] = $vars['internalid'];
-		unset($vars['internalid']);
+	if (!is_string($tag_name) || $tag_name === '') {
+		throw new \InvalidArgumentException('$tag_name is required');
 	}
 
-	if (isset($vars['__ignoreInternalid'])) {
-		unset($vars['__ignoreInternalid']);
+	if (isset($options['is_void'])) {
+		$is_void = $options['is_void'];
+	} else {
+		// from http://www.w3.org/TR/html-markup/syntax.html#syntax-elements
+		$is_void = in_array(strtolower($tag_name), array(
+			'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'keygen', 'link', 'menuitem',
+			'meta', 'param', 'source', 'track', 'wbr'
+		));
 	}
 
-	if (isset($vars['__ignoreInternalname'])) {
-		unset($vars['__ignoreInternalname']);
+	if (!empty($options['encode_text'])) {
+		$double_encode = empty($options['double_encode']) ? false : true;
+		$text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8', $double_encode);
 	}
 
-	return $vars;
+	if ($attributes) {
+		$attrs = elgg_format_attributes($attributes);
+		if ($attrs !== '') {
+			$attrs = " $attrs";
+		}
+	} else {
+		$attrs = '';
+	}
+
+	if ($is_void) {
+		return empty($options['is_xml']) ? "<{$tag_name}{$attrs}>" : "<{$tag_name}{$attrs} />";
+	} else {
+		return "<{$tag_name}{$attrs}>$text</$tag_name>";
+	}
 }
 
 /**
@@ -224,7 +294,6 @@ function elgg_normalize_url($url) {
 	$php_5_3_0_to_5_3_2 = version_compare(PHP_VERSION, '5.3.0', '>=') &&
 			version_compare(PHP_VERSION, '5.3.3', '<');
 
-	$validated = false;
 	if ($php_5_2_13_and_below || $php_5_3_0_to_5_3_2) {
 		$tmp_address = str_replace("-", "", $url);
 		$validated = filter_var($tmp_address, FILTER_VALIDATE_URL);
@@ -255,7 +324,7 @@ function elgg_normalize_url($url) {
 		// 'install.php', 'install.php?step=step'
 		return elgg_get_site_url() . $url;
 
-	} elseif (preg_match("#^[^/]*\.#i", $url)) {
+	} elseif (preg_match("#^[^/?]*\.#i", $url)) {
 		// 'example.com', 'example.com/subpage'
 		return "http://$url";
 
@@ -273,24 +342,22 @@ function elgg_normalize_url($url) {
  *
  * @param string $title The title
  *
- * @return string The optimised title
+ * @return string The optimized title
  * @since 1.7.2
  */
 function elgg_get_friendly_title($title) {
 
 	// return a URL friendly title to short circuit normal title formatting
 	$params = array('title' => $title);
-	$result = elgg_trigger_plugin_hook('format', 'friendly:title', $params, NULL);
+	$result = elgg_trigger_plugin_hook('format', 'friendly:title', $params, null);
 	if ($result) {
 		return $result;
 	}
 
-	// handle some special cases
-	$title = str_replace('&amp;', 'and', $title);
-	// quotes and angle brackets stored in the database as html encoded
-	$title = htmlspecialchars_decode($title);
-
-	$title = ElggTranslit::urlize($title);
+	// titles are often stored HTML encoded
+	$title = html_entity_decode($title, ENT_QUOTES, 'UTF-8');
+	
+	$title = \Elgg\Translit::urlize($title);
 
 	return $title;
 }
@@ -300,7 +367,7 @@ function elgg_get_friendly_title($title) {
  *
  * @see elgg_view_friendly_time()
  *
- * @param int $time A UNIX epoch timestamp
+ * @param int $time         A UNIX epoch timestamp
  * @param int $current_time Current UNIX epoch timestamp (optional)
  *
  * @return string The friendly time string
@@ -314,7 +381,7 @@ function elgg_get_friendly_time($time, $current_time = null) {
 
 	// return a time string to short circuit normal time formatting
 	$params = array('time' => $time, 'current_time' => $current_time);
-	$result = elgg_trigger_plugin_hook('format', 'friendly:time', $params, NULL);
+	$result = elgg_trigger_plugin_hook('format', 'friendly:time', $params, null);
 	if ($result) {
 		return $result;
 	}
@@ -351,25 +418,77 @@ function elgg_get_friendly_time($time, $current_time = null) {
 }
 
 /**
+ * Returns a human-readable message for PHP's upload error codes
+ *
+ * @param int $error_code The code as stored in $_FILES['name']['error']
+ * @return string
+ */
+function elgg_get_friendly_upload_error($error_code) {
+	switch ($error_code) {
+		case UPLOAD_ERR_OK:
+			return '';
+			
+		case UPLOAD_ERR_INI_SIZE:
+			$key = 'ini_size';
+			break;
+		
+		case UPLOAD_ERR_FORM_SIZE:
+			$key = 'form_size';
+			break;
+
+		case UPLOAD_ERR_PARTIAL:
+			$key = 'partial';
+			break;
+
+		case UPLOAD_ERR_NO_FILE:
+			$key = 'no_file';
+			break;
+
+		case UPLOAD_ERR_NO_TMP_DIR:
+			$key = 'no_tmp_dir';
+			break;
+
+		case UPLOAD_ERR_CANT_WRITE:
+			$key = 'cant_write';
+			break;
+
+		case UPLOAD_ERR_EXTENSION:
+			$key = 'extension';
+			break;
+		
+		default:
+			$key = 'unknown';
+			break;
+	}
+
+	return elgg_echo("upload:error:$key");
+}
+
+
+/**
  * Strip tags and offer plugins the chance.
  * Plugins register for output:strip_tags plugin hook.
  * Original string included in $params['original_string']
  *
- * @param string $string Formatted string
+ * @param string $string         Formatted string
+ * @param string $allowable_tags Optional parameter to specify tags which should not be stripped
  *
  * @return string String run through strip_tags() and any plugin hooks.
  */
-function elgg_strip_tags($string) {
+function elgg_strip_tags($string, $allowable_tags = null) {
 	$params['original_string'] = $string;
+	$params['allowable_tags'] = $allowable_tags;
 
-	$string = strip_tags($string);
+	$string = strip_tags($string, $allowable_tags);
 	$string = elgg_trigger_plugin_hook('format', 'strip_tags', $params, $string);
 
 	return $string;
 }
 
 /**
- * Apply html_entity_decode() to a string while re-entitising HTML
+ * Decode HTML markup into a raw text string
+ *
+ * This applies html_entity_decode() to a string while re-entitising HTML
  * special char entities to prevent them from being decoded back to their
  * unsafe original forms.
  *
@@ -380,22 +499,20 @@ function elgg_strip_tags($string) {
  * usually decoded, i.e. a lone &gt; is not decoded, but &lt;foo&gt; would
  * be decoded to <foo> since it creates a full tag.
  *
- * Note: This function is poorly explained in the manual - which is really
+ * Note: html_entity_decode() is poorly explained in the manual - which is really
  * bad given its potential for misuse on user input already escaped elsewhere.
  * Stackoverflow is littered with advice to use this function in the precise
  * way that would lead to user input being capable of injecting arbitrary HTML.
  *
- * @param string $string
+ * @param string $string Encoded HTML
  *
  * @return string
  *
  * @author Pádraic Brady
  * @copyright Copyright (c) 2010 Pádraic Brady (http://blog.astrumfutura.com)
  * @license Released under dual-license GPL2/MIT by explicit permission of Pádraic Brady
- *
- * @access private
  */
-function _elgg_html_decode($string) {
+function elgg_html_decode($string) {
 	$string = str_replace(
 		array('&gt;', '&lt;', '&amp;', '&quot;', '&#039;'),
 		array('&amp;gt;', '&amp;lt;', '&amp;amp;', '&amp;quot;', '&amp;#039;'),
@@ -411,30 +528,40 @@ function _elgg_html_decode($string) {
 }
 
 /**
- * Unit tests for Output
+ * Alias of elgg_html_decode
  *
- * @param sting  $hook   unit_test
- * @param string $type   system
- * @param mixed  $value  Array of tests
- * @param mixed  $params Params
+ * This is kept in 2.0 because it was used in public views and might have been copied into plugins.
  *
- * @return array
- * @access private
+ * @param string $string Encoded HTML
+ *
+ * @return string
+ * @see elgg_html_decode
+ * @deprecated
  */
-function output_unit_test($hook, $type, $value, $params) {
-	global $CONFIG;
-	$value[] = $CONFIG->path . 'engine/tests/api/output.php';
-	return $value;
+function _elgg_html_decode($string) {
+	elgg_deprecated_notice(__FUNCTION__ . ' is deprecated. Use elgg_html_decode()', '2.0');
+	return elgg_html_decode($string);
 }
 
 /**
- * Initialise the Output subsystem.
+ * Prepares query string for output to prevent CSRF attacks.
  *
- * @return void
+ * @param string $string
+ * @return string
+ *
  * @access private
  */
-function output_init() {
-	elgg_register_plugin_hook_handler('unit_test', 'system', 'output_unit_test');
+function _elgg_get_display_query($string) {
+	//encode <,>,&, quotes and characters above 127
+	if (function_exists('mb_convert_encoding')) {
+		$display_query = mb_convert_encoding($string, 'HTML-ENTITIES', 'UTF-8');
+	} else {
+		// if no mbstring extension, we just strip characters
+		$display_query = preg_replace("/[^\x01-\x7F]/", "", $string);
+	}
+	return htmlspecialchars($display_query, ENT_QUOTES, 'UTF-8', false);
 }
 
-elgg_register_event_handler('init', 'system', 'output_init');
+return function(\Elgg\EventsService $events, \Elgg\HooksRegistrationService $hooks) {
+
+};

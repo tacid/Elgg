@@ -4,8 +4,10 @@
  *
  * @package Elgg
  * @subpackage Test
+ * 
+ * TODO(ewinslow): Move this to Elgg\Database\AccessCollectionsTest
  */
-class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
+class ElggCoreAccessCollectionsTest extends \ElggCoreUnitTest {
 
 	/**
 	 * Called before each test object.
@@ -15,33 +17,17 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 
 		$this->dbPrefix = get_config("dbprefix");
 
-		$user = new ElggUser();
+		$user = new \ElggUser();
 		$user->username = 'test_user_' . rand();
 		$user->email = 'fake_email@fake.com' . rand();
 		$user->name = 'fake user';
 		$user->access_id = ACCESS_PUBLIC;
-		$user->salt = generate_random_cleartext_password();
-		$user->password = generate_user_password($user, rand());
+		$user->setPassword(rand());
 		$user->owner_guid = 0;
 		$user->container_guid = 0;
 		$user->save();
 
 		$this->user = $user;
-	}
-
-	/**
-	 * Called before each test method.
-	 */
-	public function setUp() {
-
-	}
-
-	/**
-	 * Called after each test method.
-	 */
-	public function tearDown() {
-		// do not allow SimpleTest to interpret Elgg notices as exceptions
-		$this->swallowErrors();
 	}
 
 	/**
@@ -54,7 +40,6 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 	}
 
 	public function testCreateGetDeleteACL() {
-		global $DB_QUERY_CACHE;
 		
 		$acl_name = 'test access collection';
 		$acl_id = create_access_collection($acl_name);
@@ -67,8 +52,6 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 		$this->assertEqual($acl->id, $acl_id);
 
 		if ($acl) {
-			$DB_QUERY_CACHE = array();
-			
 			$this->assertEqual($acl->name, $acl_name);
 
 			$result = delete_access_collection($acl_id);
@@ -96,13 +79,12 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 
 	public function testUpdateACL() {
 		// another fake user to test with
-		$user = new ElggUser();
+		$user = new \ElggUser();
 		$user->username = 'test_user_' . rand();
 		$user->email = 'fake_email@fake.com' . rand();
 		$user->name = 'fake user';
 		$user->access_id = ACCESS_PUBLIC;
-		$user->salt = generate_random_cleartext_password();
-		$user->password = generate_user_password($user, rand());
+		$user->setPassword(rand());
 		$user->owner_guid = 0;
 		$user->container_guid = 0;
 		$user->save();
@@ -194,7 +176,7 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 			return $value;
 		}
 
-		elgg_register_plugin_hook_handler('access:collections:write', 'all', 'test_acl_access_hook');
+		elgg_register_plugin_hook_handler('access:collections:write', 'all', 'test_acl_access_hook', 600);
 
 		// enable security since we usually run as admin
 		$ia = elgg_set_ignore_access(false);
@@ -215,7 +197,7 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 			return;
 		}
 		
-		$group = new ElggGroup();
+		$group = new \ElggGroup();
 		$group->name = 'Test group';
 		$group->save();
 		$acl = get_access_collection($group->group_acl);
@@ -237,7 +219,7 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 			return;
 		}
 
-		$group = new ElggGroup();
+		$group = new \ElggGroup();
 		$group->name = 'Test group';
 		$group->save();
 
@@ -271,13 +253,12 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 
 	public function testAccessCaching() {
 		// create a new user to check against
-		$user = new ElggUser();
+		$user = new \ElggUser();
 		$user->username = 'access_test_user';
 		$user->save();
 
 		foreach (array('get_access_list', 'get_access_array') as $func) {
-			$cache = _elgg_get_access_cache();
-			$cache->clear();
+			_elgg_services()->accessCache->clear();
 
 			// admin users run tests, so disable access
 			elgg_set_ignore_access(true);
@@ -288,6 +269,28 @@ class ElggCoreAccessCollectionsTest extends ElggCoreUnitTest {
 			$this->assertNotEqual($access, $access2, "Access test for $func");
 		}
 
-		$user->delete();	
+		$user->delete();
+	}
+	
+	public function testAddMemberToACLRemoveMember() {
+		// create a new user to check against
+		$user = new \ElggUser();
+		$user->username = 'access_test_user';
+		$user->save();
+		
+		$acl_id = create_access_collection('test acl');
+
+		$result = add_user_to_access_collection($user->guid, $acl_id);
+		$this->assertTrue($result);
+
+		if ($result) {
+			$this->assertTrue($user->delete());
+			
+			// since there are no more members this should return false
+			$acl_members = get_members_of_access_collection($acl_id, true);
+			$this->assertFalse($acl_members);
+		}
+
+		delete_access_collection($acl_id);
 	}
 }

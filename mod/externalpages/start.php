@@ -12,9 +12,11 @@ function expages_init() {
 	elgg_register_page_handler('terms', 'expages_page_handler');
 	elgg_register_page_handler('privacy', 'expages_page_handler');
 	elgg_register_page_handler('expages', 'expages_page_handler');
-	
+
 	// Register public external pages
 	elgg_register_plugin_hook_handler('public_pages', 'walled_garden', 'expages_public');
+
+	elgg_register_plugin_hook_handler('register', 'menu:expages', 'expages_menu_register_hook');
 
 	// add a menu item for the admin edit page
 	elgg_register_admin_menu_item('configure', 'expages', 'appearance');
@@ -23,7 +25,7 @@ function expages_init() {
 	expages_setup_footer_menu();
 
 	// register action
-	$actions_base = elgg_get_plugins_path() . 'externalpages/actions';
+	$actions_base = __DIR__ . '/actions';
 	elgg_register_action("expages/edit", "$actions_base/edit.php", 'admin');
 }
 
@@ -65,7 +67,7 @@ function expages_page_handler($page, $handler) {
 	$type = strtolower($handler);
 
 	$title = elgg_echo("expages:$type");
-	$content = elgg_view_title($title);
+	$header = elgg_view_title($title);
 
 	$object = elgg_get_entities(array(
 		'type' => 'object',
@@ -78,17 +80,52 @@ function expages_page_handler($page, $handler) {
 		$content .= elgg_echo("expages:notset");
 	}
 	$content = elgg_view('expages/wrapper', array('content' => $content));
+	
+	if (elgg_is_admin_logged_in()) {
+		elgg_register_menu_item('title', array(
+			'name' => 'edit',
+			'text' => elgg_echo('edit'),
+			'href' => "admin/appearance/expages?type=$type",
+			'link_class' => 'elgg-button elgg-button-action',
+		));
+	}
 
 	if (elgg_is_logged_in() || !elgg_get_config('walled_garden')) {
-		$body = elgg_view_layout('one_sidebar', array('content' => $content));
+		$body = elgg_view_layout('one_column', array('title' => $title, 'content' => $content));
 		echo elgg_view_page($title, $body);
 	} else {
 		elgg_load_css('elgg.walled_garden');
-		$body = elgg_view_layout('walled_garden', array('content' => $content));
+		$body = elgg_view_layout('walled_garden', array('content' => $header . $content));
 		echo elgg_view_page($title, $body, 'walled_garden');
 	}
 	return true;
 }
+
+/**
+ * Adds menu items to the expages edit form
+ *
+ * @param string $hook   'register'
+ * @param string $type   'menu:expages'
+ * @param array  $return current menu items
+ * @param array  $params parameters
+ * 
+ * @return array
+ */
+function expages_menu_register_hook($hook, $type, $return, $params) {
+	$type = elgg_extract('type', $params);
+		
+	$pages = array('about', 'terms', 'privacy');
+	foreach ($pages as $page) {
+		$return[] = ElggMenuItem::factory(array(
+			'name' => $page,
+			'text' => elgg_echo("expages:$page"),
+			'href' => "admin/appearance/expages?type=$page",
+			'selected' => $page === $type,
+		));
+	}
+	return $return;
+}
+
 
 /**
  * Forward to the new style of URLs

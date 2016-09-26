@@ -3,22 +3,29 @@
  * A filestore that uses disk as storage.
  *
  * @warning This should be used by a wrapper class
- * like {@link ElggFile}.
+ * like {@link \ElggFile}.
  *
  * @package    Elgg.Core
  * @subpackage FileStore.Disk
- * @link       http://docs.elgg.org/DataModel/FileStore/Disk
  */
-class ElggDiskFilestore extends ElggFilestore {
+class ElggDiskFilestore extends \ElggFilestore {
 	/**
 	 * Directory root.
 	 */
 	private $dir_root;
 
 	/**
-	 * Default depth of file directory matrix
+	 * Number of entries per matrix dir.
+	 * You almost certainly don't want to change this.
 	 */
-	private $matrix_depth = 5;
+	const BUCKET_SIZE = 5000;
+
+	/**
+	 * Global Elgg configuration
+	 *
+	 * @var \stdClass
+	 */
+	private $CONFIG;
 
 	/**
 	 * Construct a disk filestore using the given directory root.
@@ -27,11 +34,12 @@ class ElggDiskFilestore extends ElggFilestore {
 	 */
 	public function __construct($directory_root = "") {
 		global $CONFIG;
+		$this->CONFIG = $CONFIG;
 
 		if ($directory_root) {
 			$this->dir_root = $directory_root;
 		} else {
-			$this->dir_root = $CONFIG->dataroot;
+			$this->dir_root = $this->CONFIG->dataroot;
 		}
 	}
 
@@ -39,17 +47,17 @@ class ElggDiskFilestore extends ElggFilestore {
 	 * Open a file for reading, writing, or both.
 	 *
 	 * @note All files are opened binary safe.
-	 * @warning This will try to create the a directory if it doesn't exist,
-	 * even in read-only mode.
+	 * @note This will try to create the a directory if it doesn't exist and is opened
+	 * in write or append mode.
 	 *
-	 * @param ElggFile $file The file to open
-	 * @param string   $mode read, write, or append.
+	 * @param \ElggFile $file The file to open
+	 * @param string    $mode read, write, or append.
 	 *
 	 * @throws InvalidParameterException
 	 * @return resource File pointer resource
 	 * @todo This really shouldn't try to create directories if not writing.
 	 */
-	public function open(ElggFile $file, $mode) {
+	public function open(\ElggFile $file, $mode) {
 		$fullname = $this->getFilenameOnFilestore($file);
 
 		// Split into path and name
@@ -59,17 +67,19 @@ class ElggDiskFilestore extends ElggFilestore {
 		}
 
 		$path = substr($fullname, 0, $ls);
-		$name = substr($fullname, $ls);
 
-		// Try and create the directory
-		try {
-			$this->makeDirectoryRoot($path);
-		} catch (Exception $e) {
-
+		if (($mode === 'read') && (!file_exists($fullname))) {
+			return false;
 		}
 
-		if (($mode != 'write') && (!file_exists($fullname))) {
-			return false;
+		// Try to create the dir for valid write modes
+		if ($mode == 'write' || $mode == 'append') {
+			try {
+				$this->makeDirectoryRoot($path);
+			} catch (Exception $e) {
+				_elgg_services()->logger->warn("Couldn't create directory: $path");
+				return false;
+			}
 		}
 
 		switch ($mode) {
@@ -83,8 +93,8 @@ class ElggDiskFilestore extends ElggFilestore {
 				$mode = "a+b";
 				break;
 			default:
-				$msg = elgg_echo('InvalidParameterException:UnrecognisedFileMode', array($mode));
-				throw new InvalidParameterException($msg);
+				$msg = "Unrecognized file mode '" . $mode . "'";
+				throw new \InvalidParameterException($msg);
 		}
 
 		return fopen($fullname, $mode);
@@ -108,7 +118,7 @@ class ElggDiskFilestore extends ElggFilestore {
 	 *
 	 * @param resource $f      File pointer resource
 	 * @param int      $length The number of bytes to read
-	 * @param inf      $offset The number of bytes to start after
+	 * @param int      $offset The number of bytes to start after
 	 *
 	 * @return mixed Contents of file or false on fail.
 	 */
@@ -132,15 +142,19 @@ class ElggDiskFilestore extends ElggFilestore {
 	}
 
 	/**
-	 * Delete an ElggFile file.
+	 * Delete an \ElggFile file.
 	 *
-	 * @param ElggFile $file File to delete
-	 *
+	 * @param \ElggFile $file            File to delete
+	 * @param bool      $follow_symlinks If true, will also delete the target file if the current file is a symlink
 	 * @return bool
 	 */
-	public function delete(ElggFile $file) {
+	public function delete(\ElggFile $file, $follow_symlinks = true) {
 		$filename = $this->getFilenameOnFilestore($file);
-		if (file_exists($filename)) {
+		if (file_exists($filename) || is_link($filename)) {
+			if ($follow_symlinks && is_link($filename) && file_exists($filename)) {
+				$target = readlink($filename);
+				file_exists($target) && unlink($target);
+			}
 			return unlink($filename);
 		} else {
 			return true;
@@ -153,7 +167,7 @@ class ElggDiskFilestore extends ElggFilestore {
 	 * @param resource $f        File resource
 	 * @param int      $position Position in bytes
 	 *
-	 * @return bool
+	 * @return int 0 for success, or -1
 	 */
 	public function seek($f, $position) {
 		return fseek($f, $position);
@@ -182,89 +196,87 @@ class ElggDiskFilestore extends ElggFilestore {
 	}
 
 	/**
-	 * Returns the file size of an ElggFile file.
+	 * Returns the file size of an \ElggFile file.
 	 *
-	 * @param ElggFile $file File object
+	 * @param \ElggFile $file File object
 	 *
 	 * @return int The file size
 	 */
-	public function getFileSize(ElggFile $file) {
+	public function getFileSize(\ElggFile $file) {
 		return filesize($this->getFilenameOnFilestore($file));
 	}
 
 	/**
-	 * Returns the filename as saved on disk for an ElggFile object
+	 * Get the filename as saved on disk for an \ElggFile object
 	 *
-	 * @param ElggFile $file File object
+	 * Returns an empty string if no filename set
+	 *
+	 * @param \ElggFile $file File object
 	 *
 	 * @return string The full path of where the file is stored
+	 * @throws InvalidParameterException
 	 */
-	public function getFilenameOnFilestore(ElggFile $file) {
+	public function getFilenameOnFilestore(\ElggFile $file) {
 		$owner_guid = $file->getOwnerGuid();
 		if (!$owner_guid) {
-			$owner_guid = elgg_get_logged_in_user_guid();
+			$owner_guid = _elgg_services()->session->getLoggedInUserGuid();
 		}
 
 		if (!$owner_guid) {
-			$msg = elgg_echo('InvalidParameterException:MissingOwner',
-				array($file->getFilename(), $file->guid));
-			throw new InvalidParameterException($msg);
+			$msg = "File " . $file->getFilename() . " (file guid:" . $file->guid . ") is missing an owner!";
+			throw new \InvalidParameterException($msg);
 		}
 
-		return $this->dir_root . $this->makefileMatrix($owner_guid) . $file->getFilename();
+		$filename = $file->getFilename();
+		if (!$filename) {
+			return '';
+		}
+
+		$dir = new \Elgg\EntityDirLocator($owner_guid);
+
+		return $this->dir_root . $dir . $file->getFilename();
 	}
 
 	/**
-	 * Returns the contents of the ElggFile file.
+	 * Returns the contents of the \ElggFile file.
 	 *
-	 * @param ElggFile $file File object
+	 * @param \ElggFile $file File object
 	 *
-	 * @return mixed
+	 * @return string
 	 */
-	public function grabFile(ElggFile $file) {
+	public function grabFile(\ElggFile $file) {
 		return file_get_contents($file->getFilenameOnFilestore());
 	}
 
 	/**
-	 * Tests if an ElggFile file exists.
+	 * Tests if an \ElggFile file exists.
 	 *
-	 * @param ElggFile $file File object
+	 * @param \ElggFile $file File object
 	 *
 	 * @return bool
 	 */
-	public function exists(ElggFile $file) {
+	public function exists(\ElggFile $file) {
+		if (!$file->getFilename()) {
+			return false;
+		}
 		return file_exists($this->getFilenameOnFilestore($file));
 	}
 
 	/**
 	 * Returns the size of all data stored under a directory in the disk store.
 	 *
-	 * @param string $prefix         Optional/ The prefix to check under.
+	 * @param string $prefix         The prefix to check under.
 	 * @param string $container_guid The guid of the entity whose data you want to check.
 	 *
 	 * @return int|false
 	 */
-	public function getSize($prefix = '', $container_guid) {
+	public function getSize($prefix, $container_guid) {
 		if ($container_guid) {
-			return get_dir_size($this->dir_root . $this->makefileMatrix($container_guid) . $prefix);
+			$dir = new \Elgg\EntityDirLocator($container_guid);
+			return get_dir_size($this->dir_root . $dir . $prefix);
 		} else {
 			return false;
 		}
-	}
-
-	/**
-	 * Create a directory $dirroot
-	 *
-	 * @param string $dirroot The full path of the directory to create
-	 *
-	 * @throws IOException
-	 * @return true
-	 * @deprecated 1.8 Use ElggDiskFilestore::makeDirectoryRoot()
-	 */
-	protected function make_directory_root($dirroot) {
-		elgg_deprecated_notice('ElggDiskFilestore::make_directory_root() is deprecated by ::makeDirectoryRoot()', 1.8);
-
-		return $this->makeDirectoryRoot($dirroot);
 	}
 
 	/**
@@ -278,7 +290,7 @@ class ElggDiskFilestore extends ElggFilestore {
 	protected function makeDirectoryRoot($dirroot) {
 		if (!file_exists($dirroot)) {
 			if (!@mkdir($dirroot, 0700, true)) {
-				throw new IOException(elgg_echo('IOException:CouldNotMake', array($dirroot)));
+				throw new \IOException("Could not make " . $dirroot);
 			}
 		}
 
@@ -286,94 +298,8 @@ class ElggDiskFilestore extends ElggFilestore {
 	}
 
 	/**
-	 * Multibyte string tokeniser.
-	 *
-	 * Splits a string into an array. Will fail safely if mbstring is
-	 * not installed.
-	 *
-	 * @param string $string  String
-	 * @param string $charset The charset, defaults to UTF8
-	 *
-	 * @return array
-	 * @deprecated 1.8 Files are stored by date and guid; no need for this.
-	 */
-	private function mb_str_split($string, $charset = 'UTF8') {
-		elgg_deprecated_notice('ElggDiskFilestore::mb_str_split() is deprecated.', 1.8);
-
-		if (is_callable('mb_substr')) {
-			$length = mb_strlen($string);
-			$array = array();
-
-			while ($length) {
-				$array[] = mb_substr($string, 0, 1, $charset);
-				$string = mb_substr($string, 1, $length, $charset);
-
-				$length = mb_strlen($string);
-			}
-
-			return $array;
-		} else {
-			return str_split($string);
-		}
-
-		return false;
-	}
-
-	/**
-	 * Construct a file path matrix for an entity.
-	 *
-	 * @param int $identifier The guide of the entity to store the data under.
-	 *
-	 * @return str The path where the entity's data will be stored.
-	 * @deprecated 1.8 Use ElggDiskFilestore::makeFileMatrix()
-	 */
-	protected function make_file_matrix($identifier) {
-		elgg_deprecated_notice('ElggDiskFilestore::make_file_matrix() is deprecated by ::makeFileMatrix()', 1.8);
-
-		return $this->makefileMatrix($identifier);
-	}
-
-	/**
-	 * Construct a file path matrix for an entity.
-	 *
-	 * @param int $guid The guide of the entity to store the data under.
-	 *
-	 * @return str The path where the entity's data will be stored.
-	 */
-	protected function makeFileMatrix($guid) {
-		$entity = get_entity($guid);
-
-		if (!($entity instanceof ElggEntity) || !$entity->time_created) {
-			return false;
-		}
-
-		$time_created = date('Y/m/d', $entity->time_created);
-
-		return "$time_created/$entity->guid/";
-	}
-
-	/**
-	 * Construct a filename matrix.
-	 *
-	 * Generates a matrix using the entity's creation time and
-	 * unique guid.
-	 *
-	 * File path matrixes are:
-	 * YYYY/MM/DD/guid/
-	 *
-	 * @param int $guid The entity to contrust a matrix for
-	 *
-	 * @return str The
-	 */
-	protected function user_file_matrix($guid) {
-		elgg_deprecated_notice('ElggDiskFilestore::user_file_matrix() is deprecated by ::makeFileMatrix()', 1.8);
-
-		return $this->makeFileMatrix($guid);
-	}
-
-	/**
 	 * Returns a list of attributes to save to the database when saving
-	 * the ElggFile object using this file store.
+	 * the \ElggFile object using this file store.
 	 *
 	 * @return array
 	 */
@@ -395,5 +321,31 @@ class ElggDiskFilestore extends ElggFilestore {
 		}
 
 		return false;
+	}
+
+
+	
+	/**
+	 * Deprecated methods
+	 */
+
+	/**
+	 * Construct a file path matrix for an entity.
+	 *
+	 * @param int $guid The guid of the entity to store the data under.
+	 *
+	 * @return string The path where the entity's data will be stored relative to the data dir.
+	 * @deprecated 1.9 Use \Elgg\EntityDirLocator()
+	 */
+	protected function makeFileMatrix($guid) {
+		elgg_deprecated_notice('\ElggDiskFilestore::makeFileMatrix() is deprecated by \Elgg\EntityDirLocator', 1.9);
+		$entity = get_entity($guid);
+
+		if (!$entity instanceof \ElggEntity) {
+			return false;
+		}
+
+		$dir = new \Elgg\EntityDirLocator($guid);
+		return $dir->getPath();
 	}
 }

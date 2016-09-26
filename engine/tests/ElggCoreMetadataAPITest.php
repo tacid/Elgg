@@ -5,7 +5,7 @@
  * @package Elgg
  * @subpackage Test
  */
-class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
+class ElggCoreMetadataAPITest extends \ElggCoreUnitTest {
 	protected $metastrings;
 
 	/**
@@ -13,15 +13,13 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 	 */
 	public function setUp() {
 		$this->metastrings = array();
-		$this->object = new ElggObject();
+		$this->object = new \ElggObject();
 	}
 
 	/**
 	 * Called after each test method.
 	 */
 	public function tearDown() {
-		// do not allow SimpleTest to interpret Elgg notices as exceptions
-		$this->swallowErrors();
 
 		unset($this->object);
 	}
@@ -35,11 +33,11 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 		}
 
 		// lookup metastring id
-		$cs_ids = get_metastring_id('metaUnitTest', TRUE);
+		$cs_ids = elgg_get_metastring_id('metaUnitTest', true);
 		$this->assertEqual($cs_ids, $this->metastrings['metaUnitTest']);
 
 		// lookup all metastrings, ignoring case
-		$cs_ids = get_metastring_id('metaUnitTest', FALSE);
+		$cs_ids = elgg_get_metastring_id('metaUnitTest', false);
 		$this->assertEqual(count($cs_ids), 3);
 		$this->assertEqual(count($cs_ids), count($this->metastrings));
 		foreach ($cs_ids as $string )
@@ -49,8 +47,8 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 	}
 
 	public function testElggGetEntitiesFromMetadata() {
-		global $CONFIG, $METASTRINGS_CACHE, $METASTRINGS_DEADNAME_CACHE;
-		$METASTRINGS_CACHE = $METASTRINGS_DEADNAME_CACHE = array();
+		global $CONFIG, $METASTRINGS_CACHE;
+		$METASTRINGS_CACHE = array();
 
 		$this->object->title = 'Meta Unit Test';
 		$this->object->save();
@@ -61,15 +59,15 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 		$this->assertNotEqual(false, create_metadata($this->object->guid, 'metaUnitTest', 'tested'));
 
 		// check value with improper case
-		$options = array('metadata_names' => 'metaUnitTest', 'metadata_values' => 'Tested', 'limit' => 10, 'metadata_case_sensitive' => TRUE);
+		$options = array('metadata_names' => 'metaUnitTest', 'metadata_values' => 'Tested', 'limit' => 10, 'metadata_case_sensitive' => true);
 		$this->assertIdentical(array(), elgg_get_entities_from_metadata($options));
 
 		// compare forced case with ignored case
-		$options = array('metadata_names' => 'metaUnitTest', 'metadata_values' => 'tested', 'limit' => 10, 'metadata_case_sensitive' => TRUE);
+		$options = array('metadata_names' => 'metaUnitTest', 'metadata_values' => 'tested', 'limit' => 10, 'metadata_case_sensitive' => true);
 		$case_true = elgg_get_entities_from_metadata($options);
 		$this->assertIsA($case_true, 'array');
 
-		$options = array('metadata_names' => 'metaUnitTest', 'metadata_values' => 'Tested', 'limit' => 10, 'metadata_case_sensitive' => FALSE);
+		$options = array('metadata_names' => 'metaUnitTest', 'metadata_values' => 'Tested', 'limit' => 10, 'metadata_case_sensitive' => false);
 		$case_false = elgg_get_entities_from_metadata($options);
 		$this->assertIsA($case_false, 'array');
 
@@ -99,7 +97,7 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 	}
 
 	public function testElggDeleteMetadata() {
-		$e = new ElggObject();
+		$e = new \ElggObject();
 		$e->save();
 
 		for ($i = 0; $i < 30; $i++) {
@@ -123,19 +121,33 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 		$e->delete();
 	}
 
+	/**
+	 * https://github.com/Elgg/Elgg/issues/4867
+	 */
+	public function testElggGetEntityMetadataWhereSqlWithFalseValue() {
+		$pair = array('name' => 'test' , 'value' => false);
+		$result = _elgg_get_entity_metadata_where_sql('e', 'metadata', null, null, $pair);
+		$where = preg_replace( '/\s+/', ' ', $result['wheres'][0]);
+		$this->assertTrue(strpos($where, "msn1.string = 'test' AND BINARY msv1.string = 0") > 0);
+
+		$result = _elgg_get_entity_metadata_where_sql('e', 'metadata', array('test'), array(false));
+		$where = preg_replace( '/\s+/', ' ', $result['wheres'][0]);
+		$this->assertTrue(strpos($where, "msn.string IN ('test')) AND ( BINARY msv.string IN ('0')"));
+	}
+
 	// Make sure metadata with multiple values is correctly deleted when re-written
 	// by another user
-	// http://trac.elgg.org/ticket/2776
+	// https://github.com/elgg/elgg/issues/2776
 	public function test_elgg_metadata_multiple_values() {
-		$u1 = new ElggUser();
+		$u1 = new \ElggUser();
 		$u1->username = rand();
 		$u1->save();
 
-		$u2 = new ElggUser();
+		$u2 = new \ElggUser();
 		$u2->username = rand();
 		$u2->save();
 
-		$obj = new ElggObject();
+		$obj = new \ElggObject();
 		$obj->owner_guid = $u1->guid;
 		$obj->container_guid = $u1->guid;
 		$obj->access_id = ACCESS_PUBLIC;
@@ -149,8 +161,7 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 
 		// need to fake different logins.
 		// good times without mocking.
-		$original_user = elgg_get_logged_in_user_entity();
-		$_SESSION['user'] = $u1;
+		$original_user = $this->replaceSession($u1);
 		
 		elgg_set_ignore_access(false);
 
@@ -170,7 +181,7 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 		}
 
 		// add md w/ same name as a different user
-		$_SESSION['user'] = $u2;
+		$this->replaceSession($u2);
 		$md_values2 = array(
 			'four',
 			'five',
@@ -190,27 +201,84 @@ class ElggCoreMetadataAPITest extends ElggCoreUnitTest {
 			$this->assertEqual('test', $md->name);
 		}
 
-		$_SESSION['user'] = $original_user;
+		$this->replaceSession($original_user);
 
 		$obj->delete();
 		$u1->delete();
 		$u2->delete();
 	}
 
+	public function testDefaultOrderedById() {
+		$ia = elgg_set_ignore_access(true);
+
+		$obj = new ElggObject();
+		$obj->owner_guid = elgg_get_site_entity()->guid;
+		$obj->container_guid = elgg_get_site_entity()->guid;
+		$obj->access_id = ACCESS_PUBLIC;
+		$obj->save();
+
+		$obj->test_md = [1, 2, 3];
+
+		$time = time();
+		$prefix = _elgg_services()->db->getTablePrefix();
+
+		// reverse the times
+		$mds = elgg_get_metadata([
+			'metadata_owner_guids' => $obj->guid,
+			'metadata_names' => 'test_md',
+			'order_by' => 'n_table.id ASC',
+		]);
+		foreach ($mds as $i => $md) {
+			update_data("
+				UPDATE {$prefix}metadata
+				SET time_created = " . ($time - $i) . "
+				WHERE id = {$md->id}
+			");
+		}
+
+		// verify ID order
+		$mds = elgg_get_metadata([
+			'guid' => $obj->guid,
+			'metadata_names' => 'test_md',
+		]);
+		$md_values = array_map(function (ElggMetadata $md) {
+			return (int)$md->value;
+		}, $mds);
+		$this->assertEqual($md_values, [1, 2, 3]);
+
+		// ignore access bypasses the MD cache, so we try it both ways
+		elgg_set_ignore_access(false);
+		_elgg_services()->metadataCache->clear($obj->guid);
+		$md_values = $obj->test_md;
+		$this->assertEqual($md_values, [1, 2, 3]);
+
+		elgg_set_ignore_access(true);
+		_elgg_services()->metadataCache->clear($obj->guid);
+		$md_values = $obj->test_md;
+		$this->assertEqual($md_values, [1, 2, 3]);
+
+		$obj->delete();
+		elgg_set_ignore_access($ia);
+	}
+
 	protected function delete_metastrings($string) {
-		global $CONFIG, $METASTRINGS_CACHE, $METASTRINGS_DEADNAME_CACHE;
-		$METASTRINGS_CACHE = $METASTRINGS_DEADNAME_CACHE = array();
+		global $CONFIG, $METASTRINGS_CACHE;
+		$METASTRINGS_CACHE = array();
 
 		$string = sanitise_string($string);
-		mysql_query("DELETE FROM {$CONFIG->dbprefix}metastrings WHERE string = BINARY '$string'");
+		_elgg_services()->db->deleteData("
+			DELETE FROM {$CONFIG->dbprefix}metastrings WHERE string = BINARY '$string'
+		");
 	}
 
 	protected function create_metastring($string) {
-		global $CONFIG, $METASTRINGS_CACHE, $METASTRINGS_DEADNAME_CACHE;
-		$METASTRINGS_CACHE = $METASTRINGS_DEADNAME_CACHE = array();
+		global $CONFIG, $METASTRINGS_CACHE;
+		$METASTRINGS_CACHE = array();
 
 		$string = sanitise_string($string);
-		mysql_query("INSERT INTO {$CONFIG->dbprefix}metastrings (string) VALUES ('$string')");
-		$this->metastrings[$string] = mysql_insert_id();
+		$id = _elgg_services()->db->insertData("
+			INSERT INTO {$CONFIG->dbprefix}metastrings (string) VALUES ('$string')
+		");
+		$this->metastrings[$string] = $id;
 	}
 }

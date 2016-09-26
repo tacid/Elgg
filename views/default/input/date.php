@@ -14,20 +14,19 @@
  * @uses $vars['value']     The current value, if any (as a unix timestamp)
  * @uses $vars['class']     Additional CSS class
  * @uses $vars['timestamp'] Store as a Unix timestamp in seconds. Default = false
- *                          Note: you cannot use an id with the timestamp option.
+ * @uses $vars['datepicker_options'] An array of options to pass to the jQuery UI datepicker
  */
+$vars['class'] = (array) elgg_extract('class', $vars, []);
+$vars['class'][] = 'elgg-input-date';
 
 //@todo popup_calendar deprecated in 1.8.  Remove in 2.0
-if (isset($vars['class'])) {
-	$vars['class'] = "elgg-input-date popup_calendar {$vars['class']}";
-} else {
-	$vars['class'] = "elgg-input-date popup_calendar";
-}
+$vars['class'][] = 'popup_calendar';
 
 $defaults = array(
 	'value' => '',
 	'disabled' => false,
 	'timestamp' => false,
+	'type' => 'text'
 );
 
 $vars = array_merge($defaults, $vars);
@@ -36,15 +35,16 @@ $timestamp = $vars['timestamp'];
 unset($vars['timestamp']);
 
 if ($timestamp) {
-	echo elgg_view('input/hidden', array(
+	if (!isset($vars['id'])) {
+		$vars['id'] = $vars['name'];
+	}
+	echo elgg_view('input/hidden', [
 		'name' => $vars['name'],
 		'value' => $vars['value'],
-	));
-
-	$vars['class'] = "{$vars['class']} elgg-input-timestamp";
-	$vars['id'] = $vars['name'];
+		'rel' => $vars['id'],
+	]);
+	$vars['class'][] = 'elgg-input-timestamp';
 	unset($vars['name']);
-	unset($vars['internalname']);
 }
 
 // convert timestamps to text for display
@@ -52,5 +52,20 @@ if (is_numeric($vars['value'])) {
 	$vars['value'] = gmdate('Y-m-d', $vars['value']);
 }
 
-$attributes = elgg_format_attributes($vars);
-echo "<input type=\"text\" $attributes />";
+$datepicker_options = elgg_extract('datepicker_options', $vars);
+$vars['data-datepicker-opts'] = $datepicker_options ? json_encode($datepicker_options) : '';
+unset($vars['datepicker_options']);
+
+echo elgg_format_element('input', $vars);
+
+if (isset($vars['id'])) {
+	$selector = "#{$vars['id']}";
+} else {
+	$selector = ".elgg-input-date[name='{$vars['name']}']";
+}
+?>
+<script>
+	require(['input/date'], function (datepicker) {
+		datepicker.init(<?= json_encode($selector) ?>);
+	});
+</script>

@@ -7,6 +7,9 @@
  *
  * In DIV elements, Ps are only added when there would be at
  * least two of them.
+ * 
+ * @package    Elgg.Core
+ * @subpackage Output
  */
 class ElggAutoP {
 
@@ -51,8 +54,12 @@ class ElggAutoP {
 	protected $_alterList = 'article aside blockquote body details div footer header
 		section';
 
+	/** @var string */
 	protected $_unique = '';
 
+	/**
+	 * Constructor
+	 */
 	public function __construct() {
 		$this->_blocks = preg_split('@\\s+@', $this->_blocks);
 		$this->_descendList = preg_split('@\\s+@', $this->_descendList);
@@ -61,24 +68,6 @@ class ElggAutoP {
 		$this->_unique = md5(__FILE__);
 	}
 
-	/**
-	 * Intance of class for singleton pattern.
-	 * @var ElggAutoP
-	 */
-	private static $instance;
-	
-	/**
-	 * Singleton pattern.
-	 * @return ElggAutoP
-	 */
-	public static function getInstance() {
-		$className = __CLASS__;
-		if (!(self::$instance instanceof $className)) {
-			self::$instance = new $className();
-		}
-		return self::$instance;
-	}
-	
 	/**
 	 * Create wrapper P and BR elements in HTML depending on newlines. Useful when
 	 * users use newlines to signal line and paragraph breaks. In all cases output
@@ -98,42 +87,59 @@ class ElggAutoP {
 		$html = str_replace('&', $this->_unique . 'AMP', $html);
 
 		$this->_doc = new DOMDocument();
-	   
+
 		// parse to DOM, suppressing loadHTML warnings
 		// http://www.php.net/manual/en/domdocument.loadhtml.php#95463
 		libxml_use_internal_errors(true);
 
+		// Do not load entities. May be unnecessary, better safe than sorry
+		$disable_load_entities = libxml_disable_entity_loader(true);
+
 		if (!$this->_doc->loadHTML("<html><meta http-equiv='content-type' " 
 				. "content='text/html; charset={$this->encoding}'><body>{$html}</body>"
 				. "</html>")) {
+
+			libxml_disable_entity_loader($disable_load_entities);
 			return false;
 		}
+
+		libxml_disable_entity_loader($disable_load_entities);
 
 		$this->_xpath = new DOMXPath($this->_doc);
 		// start processing recursively at the BODY element
 		$nodeList = $this->_xpath->query('//body[1]');
-		$this->_addParagraphs($nodeList->item(0));
+		$this->addParagraphs($nodeList->item(0));
 
 		// serialize back to HTML
 		$html = $this->_doc->saveHTML();
 
+		// Note: we create <autop> elements, which will later be converted to paragraphs
+
 		// split AUTOPs into multiples at /\n\n+/
 		$html = preg_replace('/(' . $this->_unique . 'NL){2,}/', '</autop><autop>', $html);
-		$html = str_replace(array($this->_unique . 'BR', $this->_unique . 'NL', '<br>'), 
+		$html = str_replace(array($this->_unique . 'BR', $this->_unique . 'NL', '<br>'),
 				'<br />',
 				$html);
 		$html = str_replace('<br /></autop>', '</autop>', $html);
 
 		// re-parse so we can handle new AUTOP elements
 
+		// Do not load entities. May be unnecessary, better safe than sorry
+		$disable_load_entities = libxml_disable_entity_loader(true);
+
 		if (!$this->_doc->loadHTML($html)) {
+			libxml_disable_entity_loader($disable_load_entities);
 			return false;
 		}
+
+		libxml_disable_entity_loader($disable_load_entities);
+
 		// must re-create XPath object after DOM load
 		$this->_xpath = new DOMXPath($this->_doc);
 
 		// strip AUTOPs that only have comments/whitespace
 		foreach ($this->_xpath->query('//autop') as $autop) {
+			/* @var DOMElement $autop */
 			$hasContent = false;
 			if (trim($autop->textContent) !== '') {
 				$hasContent = true;
@@ -146,17 +152,19 @@ class ElggAutoP {
 				}
 			}
 			if (!$hasContent) {
-				// strip w/ preg_replace later (faster than moving nodes out)
+				// mark to be later replaced w/ preg_replace (faster than moving nodes out)
 				$autop->setAttribute("r", "1");
 			}
 		}
 
-		// remove a single AUTOP inside certain elements
+		// If a DIV contains a single AUTOP, remove it
 		foreach ($this->_xpath->query('//div') as $el) {
+			/* @var DOMElement $el */
 			$autops = $this->_xpath->query('./autop', $el);
 			if ($autops->length === 1) {
-				// strip w/ preg_replace later (faster than moving nodes out)
-				$autops->item(0)->setAttribute("r", "1");
+				$firstAutop = $autops->item(0);
+				/* @var DOMElement $firstAutop */
+				$firstAutop->setAttribute("r", "1");
 			}
 		}
 
@@ -182,15 +190,16 @@ class ElggAutoP {
 	/**
 	 * Add P and BR elements as necessary
 	 *
-	 * @param DOMElement $el
+	 * @param DOMElement $el DOM element
+	 * @return void
 	 */
-	protected function _addParagraphs(DOMElement $el) {
-		// no need to recurse, just queue up
+	protected function addParagraphs(DOMElement $el) {
+		// no need to call recursively, just queue up
 		$elsToProcess = array($el);
 		$inlinesToProcess = array();
 		while ($el = array_shift($elsToProcess)) {
 			// if true, we can alter all child nodes, if not, we'll just call
-			// _addParagraphs on each element in the descendInto list
+			// addParagraphs on each element in the descendInto list
 			$alterInline = in_array($el->nodeName, $this->_alterList);
 
 			// inside affected elements, we want to trim leading whitespace from
@@ -216,23 +225,29 @@ class ElggAutoP {
 
 				$isElement = ($node->nodeType === XML_ELEMENT_NODE);
 				if ($isElement) {
-					$elName = $node->nodeName;
+					$isBlock = in_array($node->nodeName, $this->_blocks);
+					if (!$isBlock) {
+						// if we start with an inline element we don't need to do this
+						$ltrimFirstTextNode = false;
+					}
+				} else {
+					$isBlock = false;
 				}
-				$isBlock = ($isElement && in_array($elName, $this->_blocks));
 
 				if ($alterInline) {
-					$isInline = $isElement && ! $isBlock;
 					$isText = ($node->nodeType === XML_TEXT_NODE);
 					$isLastInline = (! $node->nextSibling
-								   || ($node->nextSibling->nodeType === XML_ELEMENT_NODE
-									   && in_array($node->nextSibling->nodeName, $this->_blocks)));
+							|| ($node->nextSibling->nodeType === XML_ELEMENT_NODE
+								&& in_array($node->nextSibling->nodeName, $this->_blocks)));
 					if ($isElement) {
 						$isFollowingBr = ($node->nodeName === 'br');
 					}
 
 					if ($isText) {
 						$nodeText = $node->nodeValue;
+
 						if ($ltrimFirstTextNode) {
+							// we're at the beginning of a sequence of text/inline elements
 							$nodeText = ltrim($nodeText);
 							$ltrimFirstTextNode = false;
 						}
@@ -241,6 +256,7 @@ class ElggAutoP {
 							$nodeText = substr($nodeText, strlen($m[0]));
 						}
 						if ($isLastInline) {
+							// we're at the end of a sequence of text/inline elements
 							$nodeText = rtrim($nodeText);
 						}
 						$nodeText = str_replace("\n", $this->_unique . 'NL', $nodeText);
@@ -258,7 +274,7 @@ class ElggAutoP {
 					if ($isBlock) {
 						if (in_array($node->nodeName, $this->_descendList)) {
 							$elsToProcess[] = $node;
-							//$this->_addParagraphs($node);
+							//$this->addParagraphs($node);
 						}
 					}
 					$openP = true;

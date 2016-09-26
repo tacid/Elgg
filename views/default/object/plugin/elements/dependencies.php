@@ -13,7 +13,7 @@ $deps = $plugin->getPackage()->checkDependencies(true);
 
 $columns = array('type', 'name', 'expected_value', 'local_value', 'comment');
 
-echo '<table class="elgg-plugin-dependencies styled"><tr>';
+echo '<table class="elgg-plugin-dependencies styled elgg-table"><tr>';
 
 foreach ($columns as $column) {
 	$column = elgg_echo("admin:plugins:dependencies:$column");
@@ -24,7 +24,7 @@ echo '</tr>';
 
 $row = 'odd';
 foreach ($deps as $dep) {
-	$fields = elgg_get_plugin_dependency_strings($dep);
+	$fields = _elgg_get_plugin_dependency_strings($dep);
 	$type = $dep['type'];
 
 	if ($dep['status']) {

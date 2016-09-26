@@ -9,8 +9,8 @@ $owner = $vars['entity']->guid;
 
 //grab the user's latest from the wire
 $params = array(
-	'types' => 'object',
-	'subtypes' => 'thewire',
+	'type' => 'object',
+	'subtype' => 'thewire',
 	'owner_guid' => $owner,
 	'limit' => 1,
 );
@@ -25,7 +25,7 @@ if ($latest_wire && count($latest_wire) > 0) {
 	if ($owner == elgg_get_logged_in_user_guid()) {
 		$url_to_wire = "thewire/owner/" . $vars['entity']->username;
 		$button = elgg_view('output/url', array(
-			'text' => elgg_echo('thewire:update'),
+			'text' => elgg_echo('update'),
 			'href' => $url_to_wire,
 			'class' => 'elgg-button elgg-button-action float-alt',
 			'is_trusted' => true,

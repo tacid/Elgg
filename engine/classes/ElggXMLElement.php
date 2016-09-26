@@ -12,7 +12,7 @@ class ElggXMLElement {
 	private $_element;
 
 	/**
-	 * Creates an ElggXMLParser from a string or existing SimpleXMLElement
+	 * Creates an \ElggXMLParser from a string or existing SimpleXMLElement
 	 * 
 	 * @param string|SimpleXMLElement $xml The XML to parse
 	 */
@@ -20,7 +20,12 @@ class ElggXMLElement {
 		if ($xml instanceof SimpleXMLElement) {
 			$this->_element = $xml;
 		} else {
+			// do not load entities
+			$disable_load_entities = libxml_disable_entity_loader(true);
+
 			$this->_element = new SimpleXMLElement($xml);
+
+			libxml_disable_entity_loader($disable_load_entities);
 		}
 	}
 
@@ -32,7 +37,7 @@ class ElggXMLElement {
 	}
 
 	/**
-	 * @return array:string The attributes
+	 * @return string[] The attributes
 	 */
 	public function getAttributes() {
 		//include namespace declarations as attributes
@@ -64,19 +69,25 @@ class ElggXMLElement {
 	}
 
 	/**
-	 * @return array:ElggXMLElement Child elements
+	 * @return \ElggXMLElement[] Child elements
 	 */
 	public function getChildren() {
 		$children = $this->_element->children();
 		$result = array();
 		foreach ($children as $val) {
-			$result[] = new ElggXMLElement($val);
+			$result[] = new \ElggXMLElement($val);
 		}
 
 		return $result;
 	}
 
-	function __get($name) {
+	/**
+	 * Override ->
+	 * 
+	 * @param string $name Property name
+	 * @return mixed
+	 */
+	public function __get($name) {
 		switch ($name) {
 			case 'name':
 				return $this->getName();
@@ -94,7 +105,13 @@ class ElggXMLElement {
 		return null;
 	}
 
-	function __isset($name) {
+	/**
+	 * Override isset
+	 * 
+	 * @param string $name Property name
+	 * @return boolean
+	 */
+	public function __isset($name) {
 		switch ($name) {
 			case 'name':
 				return $this->getName() !== null;
@@ -111,5 +128,4 @@ class ElggXMLElement {
 		}
 		return false;
 	}
-
 }

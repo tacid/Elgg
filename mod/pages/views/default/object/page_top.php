@@ -28,9 +28,16 @@ if ($page->write_access_id == ACCESS_PUBLIC) {
 if ($revision) {
 	$annotation = $revision;
 } else {
-	$annotation = $page->getAnnotations('page', 1, 0, 'desc');
+	$annotation = $page->getAnnotations(array(
+		'annotation_name' => 'page',
+		'limit' => 1,
+		'reverse_order_by' => true,
+	));
 	if ($annotation) {
 		$annotation = $annotation[0];
+	} else {
+		elgg_log("Failed to access annotation for page with GUID {$page->guid}", 'WARNING');
+		return;
 	}
 }
 
@@ -52,7 +59,7 @@ $comments_count = $page->countComments();
 if ($comments_count != 0 && !$revision) {
 	$text = elgg_echo("comments") . " ($comments_count)";
 	$comments_link = elgg_view('output/url', array(
-		'href' => $page->getURL() . '#page-comments',
+		'href' => $page->getURL() . '#comments',
 		'text' => $text,
 		'is_trusted' => true,
 	));
@@ -60,18 +67,27 @@ if ($comments_count != 0 && !$revision) {
 	$comments_link = '';
 }
 
-$metadata = elgg_view_menu('entity', array(
-	'entity' => $vars['entity'],
-	'handler' => 'pages',
-	'sort_by' => 'priority',
-	'class' => 'elgg-menu-hz',
-));
-
 $subtitle = "$editor_text $comments_link $categories";
 
+$metadata = '';
 // do not show the metadata and controls in widget view
-if (elgg_in_context('widgets') || $revision) {
-	$metadata = '';
+if (!elgg_in_context('widgets')) {
+	// If we're looking at a revision, display annotation menu
+	if ($revision) {
+		$metadata = elgg_view_menu('annotation', array(
+			'annotation' => $annotation,
+			'sort_by' => 'priority',
+			'class' => 'elgg-menu-hz float-alt',
+		));
+	} else {
+		// Regular entity menu
+		$metadata = elgg_view_menu('entity', array(
+			'entity' => $vars['entity'],
+			'handler' => 'pages',
+			'sort_by' => 'priority',
+			'class' => 'elgg-menu-hz',
+		));
+	}
 }
 
 if ($full) {

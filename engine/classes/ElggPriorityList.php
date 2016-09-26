@@ -2,7 +2,7 @@
 /**
  * Iterate over elements in a specific priority.
  *
- * $pl = new ElggPriorityList();
+ * $pl = new \ElggPriorityList();
  * $pl->add('Element 0');
  * $pl->add('Element 10', 10);
  * $pl->add('Element -10', -10);
@@ -19,7 +19,7 @@
  * Collisions on priority are handled by inserting the element at or as close to the
  * requested priority as possible:
  *
- * $pl = new ElggPriorityList();
+ * $pl = new \ElggPriorityList();
  * $pl->add('Element 5', 5);
  * $pl->add('Colliding element 5', 5);
  * $pl->add('Another colliding element 5', 5);
@@ -35,7 +35,7 @@
  *
  * You can do priority lookups by element:
  *
- * $pl = new ElggPriorityList();
+ * $pl = new \ElggPriorityList();
  * $pl->add('Element 0');
  * $pl->add('Element -5', -5);
  * $pl->add('Element 10', 10);
@@ -55,7 +55,7 @@
  * To move an element:
  * $pl->move('Element -5', -3);
  *
- * ElggPriorityList only tracks priority. No checking is done in ElggPriorityList for duplicates or
+ * \ElggPriorityList only tracks priority. No checking is done in \ElggPriorityList for duplicates or
  * updating. If you need to track this use objects and an external map:
  *
  * function elgg_register_something($id, $display_name, $location, $priority = 500) {
@@ -64,7 +64,7 @@
  *	static $list;
  *
  *	if (!$list) {
- *		$list = new ElggPriorityList();
+ *		$list = new \ElggPriorityList();
  *	}
  *
  *	// update if already registered.
@@ -77,7 +77,7 @@
  *		$element->display_name = $display_name;
  *		$element->location = $location;
  *	} else {
- *		$element = new stdClass();
+ *		$element = new \stdClass();
  *		$element->display_name = $display_name;
  *		$element->location = $location;
  *		if (!$list->add($element, $priority)) {
@@ -89,11 +89,11 @@
  *	return true;
  * }
  *
- * @package Elgg.Core
+ * @package    Elgg.Core
  * @subpackage Helpers
  */
 class ElggPriorityList
-	implements Iterator, Countable {
+	implements \Iterator, \Countable {
 
 	/**
 	 * The list of elements
@@ -126,7 +126,9 @@ class ElggPriorityList
 	 *                        maintains its priority and the new element is to the next available
 	 *                        slot, taking into consideration all previously registered elements.
 	 *                        Negative elements are accepted.
+	 * @param bool  $exact    unused
 	 * @return int            The priority of the added element.
+	 * @todo remove $exact or implement it. Note we use variable name strict below.
 	 */
 	public function add($element, $priority = null, $exact = false) {
 		if ($priority !== null && !is_numeric($priority)) {
@@ -146,7 +148,8 @@ class ElggPriorityList
 	 * @warning The element must have the same attributes / values. If using $strict, it must have
 	 *          the same types. array(10) will fail in strict against array('10') (str vs int).
 	 *
-	 * @param type $element
+	 * @param mixed $element The element to remove from the list
+	 * @param bool  $strict  Whether to check the type of the element match
 	 * @return bool
 	 */
 	public function remove($element, $strict = false) {
@@ -162,10 +165,10 @@ class ElggPriorityList
 	/**
 	 * Move an existing element to a new priority.
 	 *
-	 * @param mixed  $current_priority
-	 * @param int    $new_priority
-	 *
-	 * @return int The new priority.
+	 * @param mixed $element      The element to move
+	 * @param int   $new_priority The new priority for the element
+	 * @param bool  $strict       Whether to check the type of the element match
+	 * @return bool
 	 */
 	public function move($element, $new_priority, $strict = false) {
 		$new_priority = (int) $new_priority;
@@ -200,12 +203,12 @@ class ElggPriorityList
 	 *
 	 * If no user function is provided the elements are sorted by priority registered.
 	 *
-	 * The callback function should accept the array of elements as the first argument and should
-	 * return a sorted array.
+	 * The callback function should accept the array of elements as the first 
+	 * argument and should return a sorted array.
 	 *
 	 * This function can be called multiple times.
 	 *
-	 * @param type $callback
+	 * @param callback $callback The callback for sorting. Numeric sorting is the default.
 	 * @return bool
 	 */
 	public function sort($callback = null) {
@@ -268,7 +271,7 @@ class ElggPriorityList
 	/**
 	 * Returns the element at $priority.
 	 *
-	 * @param int $priority
+	 * @param int $priority The priority
 	 * @return mixed The element or false on fail.
 	 */
 	public function getElement($priority) {
@@ -348,10 +351,15 @@ class ElggPriorityList
 	public function valid() {
 		$this->sortIfUnsorted();
 		$key = key($this->elements);
-		return ($key !== NULL && $key !== FALSE);
+		return ($key !== null && $key !== false);
 	}
 
-	// Countable
+	/**
+	 * Countable interface
+	 *
+	 * @see Countable::count()
+	 * @return int
+	 */
 	public function count() {
 		return count($this->elements);
 	}

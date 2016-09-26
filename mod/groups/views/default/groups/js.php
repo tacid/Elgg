@@ -1,15 +1,11 @@
 <?php
 /**
- * Javascript for Groups forms
- *
  * @package ElggGroups
+ * @deprecated 2.2
  */
+elgg_deprecated_notice('groups/js view has been deprecated. Instead define dependency on "groups/navigation" AMD module for "feature" and "unfeature" menu items', '2.2');
 ?>
-
-// this adds a class to support IE8 and older
-elgg.register_hook_handler('init', 'system', function() {
-	// jQuery uses 0-based indexing
-	$('#groups-tools').children('li:even').addClass('odd');
+//<script>
+require(['elgg'], function(elgg) {
+	elgg.ui.registerTogglableMenuItems('feature', 'unfeature');
 });
-
-elgg.ui.registerTogglableMenuItems('feature', 'unfeature');

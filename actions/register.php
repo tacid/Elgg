@@ -27,7 +27,7 @@ if (elgg_get_config('allow_registration')) {
 			throw new RegistrationException(elgg_echo('RegistrationException:PasswordMismatch'));
 		}
 
-		$guid = register_user($username, $password, $name, $email, false, $friend_guid, $invitecode);
+		$guid = register_user($username, $password, $name, $email);
 
 		if ($guid) {
 			$new_user = get_entity($guid);
@@ -45,7 +45,9 @@ if (elgg_get_config('allow_registration')) {
 
 			// @todo should registration be allowed no matter what the plugins return?
 			if (!elgg_trigger_plugin_hook('register', 'user', $params, TRUE)) {
+				$ia = elgg_set_ignore_access(true);
 				$new_user->delete();
+				elgg_set_ignore_access($ia);
 				// @todo this is a generic messages. We could have plugins
 				// throw a RegistrationException, but that is very odd
 				// for the plugin hooks system.
@@ -53,14 +55,17 @@ if (elgg_get_config('allow_registration')) {
 			}
 
 			elgg_clear_sticky_form('register');
-			system_message(elgg_echo("registerok", array(elgg_get_site_entity()->name)));
 
-			// if exception thrown, this probably means there is a validation
-			// plugin that has disabled the user
-			try {
-				login($new_user);
-			} catch (LoginException $e) {
-				// do nothing
+			if ($new_user->enabled == "yes") {
+				system_message(elgg_echo("registerok", array(elgg_get_site_entity()->name)));
+
+				// if exception thrown, this probably means there is a validation
+				// plugin that has disabled the user
+				try {
+					login($new_user);
+				} catch (LoginException $e) {
+					// do nothing
+				}
 			}
 
 			// Forward on success, assume everything else is an error...

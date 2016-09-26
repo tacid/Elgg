@@ -18,34 +18,6 @@ elgg.add_translation = function(lang, translations) {
 };
 
 /**
- * Load the translations for the given language.
- *
- * If no language is specified, the default language is used.
- * @param {string} language
- * @return {XMLHttpRequest}
- */
-elgg.reload_all_translations = function(language) {
-	var lang = language || elgg.get_language();
-
-	var url, options;
-	if (elgg.config.simplecache_enabled) {
-		url = 'cache/js/' + elgg.config.lastcache + '/default/languages/' + lang + '.js';
-		options = {};
-	} else {
-		url = 'ajax/view/js/languages';
-		options = {data: {language: lang}};
-	}
-
-	options['success'] = function(json) {
-		elgg.add_translation(lang, json);
-		elgg.config.languageReady = true;
-		elgg.initWhenReady();
-	};
-
-	elgg.getJSON(url, options);
-};
-
-/**
  * Get the current language
  * @return {String}
  */
@@ -62,11 +34,16 @@ elgg.get_language = function() {
 /**
  * Translates a string
  *
- * @param {String} key      The string to translate
- * @param {Array}  argv     vsprintf support
- * @param {String} language The language to display it in
+ * @note The current system only loads a single language module per page, and it comes pre-merged with English
+ *       translations. Hence, elgg.echo() can only return translations in the language returned by
+ *       elgg.get_language(). Requests for other languages will fail unless a 3rd party plugin has manually
+ *       used elgg.add_translation() to merge the language module ahead of time.
  *
- * @return {String} The translation
+ * @param {String} key      Message key
+ * @param {Array}  argv     vsprintf() arguments
+ * @param {String} language Requested language. Not recommended (see above).
+ *
+ * @return {String} The translation or the given key if no translation available
  */
 elgg.echo = function(key, argv, language) {
 	//elgg.echo('str', 'en')
@@ -84,15 +61,10 @@ elgg.echo = function(key, argv, language) {
 	argv = argv || [];
 
 	map = translations[language] || translations[dlang];
-	if (map && map[key]) {
+	if (map && elgg.isString(map[key])) {
 		return vsprintf(map[key], argv);
 	}
 
 	return key;
 };
 
-elgg.config.translations.init = function() {
-	elgg.reload_all_translations();
-};
-
-elgg.register_hook_handler('boot', 'system', elgg.config.translations.init);

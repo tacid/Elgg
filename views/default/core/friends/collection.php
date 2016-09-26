@@ -21,11 +21,12 @@ echo "<li><h2>";
 //as collections are private, check that the logged in user is the owner
 if ($coll->owner_guid == elgg_get_logged_in_user_guid()) {
 	echo "<div class=\"friends_collections_controls\">";
-	echo elgg_view('output/confirmlink', array(
+	echo elgg_view('output/url', array(
 			'href' => 'action/friends/collections/delete?collection=' . $coll->id,
 			'class' => 'delete_collection',
 			'text' => elgg_view_icon('delete'),
 			'encode_text' => false,
+			'confirm' => true,
 		));
 	echo "</div>";
 }
@@ -49,12 +50,14 @@ if ($friends) {
 		'friendspicker' => $vars['friendspicker'],
 	));
 ?>
-<?php //@todo JS 1.8: no ?>
-	<script type="text/javascript">
-	$(function () {
-
-			$('#friends-picker_placeholder<?php echo $vars['friendspicker']; ?>').load(elgg.config.wwwroot + 'pages/friends/collections/pickercallback.php?username=<?php echo elgg_get_logged_in_user_entity()->username; ?>&type=list&collection=<?php echo $vars['collection']->id; ?>');
-
+	<script>
+	require(['elgg', 'jquery'], function(elgg, $) {
+		$(function () {
+			var url = elgg.config.wwwroot + 'collections/pickercallback' +
+				'?username=<?php echo elgg_get_logged_in_user_entity()->username; ?>' +
+				'&type=list&collection=<?php echo $vars['collection']->id; ?>';
+			$('#friends-picker_placeholder<?php echo $vars['friendspicker']; ?>').load(url);
+		});
 	});
 	</script>
 	<?php

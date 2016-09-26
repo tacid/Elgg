@@ -4,6 +4,7 @@
  *
  * @uses $vars['entity']      ElggWidget
  * @uses $vars['show_access'] Show the access control in edit area? (true)
+ * @uses $vars['class']       Optional additional CSS class
  */
 
 $widget = $vars['entity'];
@@ -14,7 +15,10 @@ if (!elgg_instanceof($widget, 'object', 'widget')) {
 $show_access = elgg_extract('show_access', $vars, true);
 
 // @todo catch for disabled plugins
-$widget_types = elgg_get_widget_types('all');
+$widget_types = elgg_get_widget_types([
+	'context' => 'all',
+	'container' => $widget->getContainerEntity(),
+]);
 
 $handler = $widget->handler;
 
@@ -33,28 +37,23 @@ $controls = elgg_view('object/widget/elements/controls', array(
 	'show_edit' => $edit_area != '',
 ));
 
-// don't show content for default widgets
-if (elgg_in_context('default_widgets')) {
-	$content = '';
-} else {
-	if (elgg_view_exists("widgets/$handler/content")) {
-		$content = elgg_view("widgets/$handler/content", $vars);
-	} else {
-		elgg_deprecated_notice("widgets use content as the display view", 1.8);
-		$content = elgg_view("widgets/$handler/view", $vars);
-	}
-}
+$content = elgg_view('object/widget/elements/content', $vars);
 
 $widget_id = "elgg-widget-$widget->guid";
-$widget_instance = "elgg-widget-instance-$handler";
+$widget_instance = preg_replace('/[^a-z0-9-]/i', '-', "elgg-widget-instance-$handler");
 if ($can_edit) {
 	$widget_class = "elgg-state-draggable $widget_instance";
 } else {
 	$widget_class = "elgg-state-fixed $widget_instance";
 }
 
+$additional_class = elgg_extract('class', $vars, '');
+if ($additional_class) {
+	$widget_class = "$widget_class $additional_class";
+}
+
 $widget_header = <<<HEADER
-	<div class="elgg-widget-handle clearfix"><h3>$title</h3>
+	<div class="elgg-widget-handle clearfix"><h3 class="elgg-widget-title">$title</h3>
 	$controls
 	</div>
 HEADER;

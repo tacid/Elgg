@@ -20,12 +20,12 @@ $body = elgg_list_entities_from_relationship(array(
 	'relationship' => 'member',
 	'relationship_guid' => $vars['entity']->guid,
 	'inverse_relationship' => true,
-	'types' => 'user',
+	'type' => 'user',
 	'limit' => $limit,
+	'order_by' => 'r.time_created DESC',
 	'pagination' => false,
 	'list_type' => 'gallery',
 	'gallery_class' => 'elgg-gallery-users',
-	'pagination' => false
 ));
 
 $body .= "<div class='center mts'>$all_link</div>";

@@ -1,10 +1,4 @@
 <?php
-/**
- * Pages languages
- *
- * @package ElggPages
- */
-
 return array(
 
 	/**
@@ -15,26 +9,30 @@ return array(
 	'pages:owner' => "%s's pages",
 	'pages:friends' => "Friends' pages",
 	'pages:all' => "All site pages",
-	'pages:add' => "Add page",
+	'pages:add' => "Add a page",
 
 	'pages:group' => "Group pages",
 	'groups:enablepages' => 'Enable group pages',
 
+	'pages:new' => "A new page",
 	'pages:edit' => "Edit this page",
 	'pages:delete' => "Delete this page",
 	'pages:history' => "History",
 	'pages:view' => "View page",
 	'pages:revision' => "Revision",
+	'pages:current_revision' => "Current Revision",
+	'pages:revert' => "Revert",
 
 	'pages:navigation' => "Navigation",
-	'pages:new' => "A new page",
-	'pages:notification' =>
-'%s added a new page:
+
+	'pages:notify:summary' => 'New page called %s',
+	'pages:notify:subject' => "A new page: %s",
+	'pages:notify:body' =>
+'%s added a new page: %s
 
 %s
-%s
 
-View and comment on the new page:
+View and comment on the page:
 %s
 ',
 	'item:object:page_top' => 'Top-level pages',
@@ -75,6 +73,9 @@ View and comment on the new page:
 	'pages:error:no_title' => 'You must specify a title for this page.',
 	'pages:delete:success' => 'The page was successfully deleted.',
 	'pages:delete:failure' => 'The page could not be deleted.',
+	'pages:revision:delete:success' => 'The page revision was successfully deleted.',
+	'pages:revision:delete:failure' => 'The page revision could not be deleted.',
+	'pages:revision:not_found' => 'Cannot find this revision.',
 
 	/**
 	 * Page

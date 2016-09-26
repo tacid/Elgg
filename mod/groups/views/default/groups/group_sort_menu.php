@@ -7,21 +7,34 @@
 
 $tabs = array(
 	'newest' => array(
-		'text' => elgg_echo('groups:newest'),
+		'text' => elgg_echo('sort:newest'),
 		'href' => 'groups/all?filter=newest',
 		'priority' => 200,
 	),
+	'alpha' => array(
+		'text' => elgg_echo('sort:alpha'),
+		'href' => 'groups/all?filter=alpha',
+		'priority' => 250,
+	),
 	'popular' => array(
-		'text' => elgg_echo('groups:popular'),
+		'text' => elgg_echo('sort:popular'),
 		'href' => 'groups/all?filter=popular',
 		'priority' => 300,
 	),
-	'discussion' => array(
-		'text' => elgg_echo('groups:latestdiscussion'),
-		'href' => 'groups/all?filter=discussion',
+	'featured' => array(
+		'text' => elgg_echo('groups:featured'),
+		'href' => 'groups/all?filter=featured',
 		'priority' => 400,
 	),
 );
+
+if (elgg_is_active_plugin('discussions')) {
+	$tabs['discussion'] = array(
+		'text' => elgg_echo('discussion:latest'),
+		'href' => 'groups/all?filter=discussion',
+		'priority' => 500,
+	);
+}
 
 foreach ($tabs as $name => $tab) {
 	$tab['name'] = $name;
