@@ -305,7 +305,17 @@ function elgg_enable_entity($guid, $recursive = true) {
  *				Avoid setting this option without a full understanding of the underlying
  *				SQL query Elgg creates.
  *
- * @return mixed If count, int. If not count, array. false on errors.
+ *  batch => bool (false) If set to true, an Elgg\BatchResult object will be returned instead of an array.
+ *           Since 2.3
+ *
+ *  batch_inc_offset => bool (true) If "batch" is used, this tells the batch to increment the offset
+ *                      on each fetch. This must be set to false if you delete the batched results.
+ *
+ *  batch_size => int (25) If "batch" is used, this is the number of entities/rows to pull in before
+ *                requesting more.
+ *
+ * @return \ElggEntity[]|int|mixed If count, int. Otherwise an array or an Elgg\BatchResult. false on errors.
+ *
  * @since 1.7.0
  * @see elgg_get_entities_from_metadata()
  * @see elgg_get_entities_from_relationship()
@@ -366,7 +376,8 @@ function _elgg_get_entity_time_where_sql($table, $time_created_upper = null,
  * @param array    $options Any options from $getter options plus:
  *                   item_view => STR Optional. Alternative view used to render list items
  *                   full_view => BOOL Display full view of entities (default: false)
- *                   list_type => STR 'list' or 'gallery'
+ *                   list_type => STR 'list', 'gallery', or 'table'
+ *                   columns => ARR instances of Elgg\Views\TableColumn if list_type is "table"
  *                   list_type_toggle => BOOL Display gallery / list switch
  *                   pagination => BOOL Display pagination links
  *                   no_results => STR|Closure Message to display when there are no entities
@@ -396,12 +407,6 @@ function elgg_list_entities(array $options = array(), $getter = 'elgg_get_entiti
 	);
 
 	$options = array_merge($defaults, $options);
-
-	// backward compatibility
-	if (isset($options['view_type_toggle'])) {
-		elgg_deprecated_notice("Option 'view_type_toggle' deprecated by 'list_type_toggle' in elgg_list* functions", 1.9);
-		$options['list_type_toggle'] = $options['view_type_toggle'];
-	}
 
 	$options['count'] = true;
 	$count = call_user_func($getter, $options);
@@ -658,12 +663,6 @@ function elgg_list_registered_entities(array $options = array()) {
 
 	$options = array_merge($defaults, $options);
 
-	// backward compatibility
-	if (isset($options['view_type_toggle'])) {
-		elgg_deprecated_notice("Option 'view_type_toggle' deprecated by 'list_type_toggle' in elgg_list* functions", 1.9);
-		$options['list_type_toggle'] = $options['view_type_toggle'];
-	}
-
 	$types = get_registered_entity_types();
 
 	foreach ($types as $type => $subtype_array) {
@@ -741,11 +740,21 @@ function elgg_instanceof($entity, $type = null, $subtype = null, $class = null) 
  * @param int $guid   Entity annotation|relationship action carried out on
  * @param int $posted Timestamp of last action
  *
- * @return bool
+ * @return int|false Timestamp or false on failure
  * @access private
+ * @deprecated 2.3
  */
 function update_entity_last_action($guid, $posted = null) {
-	return _elgg_services()->entityTable->updateLastAction($guid, $posted);
+	elgg_deprecated_notice(__FUNCTION__ . ' has been deprecated. Refrain from updating last action timestamp manually', '2.3');
+
+	$result = false;
+	$ia = elgg_set_ignore_access(true);
+	$entity = get_entity($guid);
+	if ($entity) {
+		$result = $entity->updateLastAction($posted);
+	}
+	elgg_set_ignore_access($ia);
+	return $result;
 }
 
 /**

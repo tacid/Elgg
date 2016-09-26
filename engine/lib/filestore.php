@@ -7,6 +7,8 @@
  * @subpackage DataModel.FileStorage
  */
 
+use Symfony\Component\HttpFoundation\File\UploadedFile;
+
 /**
  * Get the size of the specified directory.
  *
@@ -39,23 +41,16 @@ function get_dir_size($dir, $total_size = 0) {
  * @param string $input_name The name of the file input field on the submission form
  *
  * @return mixed|false The contents of the file, or false on failure.
+ * @deprecated 2.3
  */
 function get_uploaded_file($input_name) {
-	$files = _elgg_services()->request->files;
-	if (!$files->has($input_name)) {
+	elgg_deprecated_notice(__FUNCTION__ . ' has been deprecated and will be removed', '2.3');
+	$inputs = elgg_get_uploaded_files($input_name);
+	$input = array_shift($inputs);
+	if (!$input || !$input->isValid()) {
 		return false;
 	}
-
-	$file = $files->get($input_name);
-	if (empty($file)) {
-		// a file input was provided but no file uploaded
-		return false;
-	}
-	if ($file->getError() !== 0) {
-		return false;
-	}
-
-	return file_get_contents($file->getPathname());
+	return file_get_contents($input->getPathname());
 }
 
 /**
@@ -420,37 +415,6 @@ function _elgg_clear_entity_files($entity) {
 	}
 }
 
-
-/// Variable holding the default datastore
-$DEFAULT_FILE_STORE = null;
-
-/**
- * Return the default filestore.
- *
- * @return \ElggFilestore
- * @deprecated Will be removed in 3.0
- */
-function get_default_filestore() {
-	elgg_deprecated_notice(__FUNCTION__ . ' is deprecated.', '2.1');
-
-	return $GLOBALS['DEFAULT_FILE_STORE'];
-}
-
-/**
- * Set the default filestore for the system.
- *
- * @param \ElggFilestore $filestore An \ElggFilestore object.
- *
- * @return true
- * @deprecated Will be removed in 3.0
- */
-function set_default_filestore(\ElggFilestore $filestore) {
-	elgg_deprecated_notice(__FUNCTION__ . ' is deprecated.', '2.1');
-
-	$GLOBALS['DEFAULT_FILE_STORE'] = $filestore;
-	return true;
-}
-
 /**
  * Returns the category of a file from its MIME type
  *
@@ -462,21 +426,6 @@ function set_default_filestore(\ElggFilestore $filestore) {
 function elgg_get_file_simple_type($mime_type) {
 	$params = array('mime_type' => $mime_type);
 	return elgg_trigger_plugin_hook('simple_type', 'file', $params, 'general');
-}
-
-/**
- * Bootstraps the default filestore at "boot, system" event
- *
- * @return void
- * @access private
- */
-function _elgg_filestore_boot() {
-	global $CONFIG;
-
-	// Now register a default filestore
-	if (isset($CONFIG->dataroot)) {
-		$GLOBALS['DEFAULT_FILE_STORE'] = new \ElggDiskFilestore($CONFIG->dataroot);
-	}
 }
 
 /**
@@ -741,7 +690,16 @@ function _elgg_filestore_move_icons($event, $type, $entity) {
 	}
 }
 
+/**
+ * Returns an array of uploaded file objects regardless of upload status/errors
+ *
+ * @param string $input_name Form input name
+ * @return UploadedFile[]|false
+ */
+function elgg_get_uploaded_files($input_name) {
+	return _elgg_services()->uploads->getUploadedFiles($input_name);
+}
+
 return function(\Elgg\EventsService $events, \Elgg\HooksRegistrationService $hooks) {
-	$events->registerHandler('boot', 'system', '_elgg_filestore_boot', 100);
 	$events->registerHandler('init', 'system', '_elgg_filestore_init', 100);
 };

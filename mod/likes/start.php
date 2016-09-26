@@ -14,7 +14,6 @@ elgg_register_event_handler('init', 'system', 'likes_init');
 function likes_init() {
 
 	elgg_extend_view('elgg.css', 'likes/css');
-	elgg_extend_view('elgg.js', 'likes/js');
 
 	// used to preload likes data before rendering river
 	elgg_extend_view('page/components/list', 'likes/before_lists', 1);
@@ -114,6 +113,7 @@ function likes_entity_menu_setup($hook, $type, $return, $params) {
 			'title' => elgg_echo('likes:likethis'),
 			'item_class' => $hasLiked ? 'hidden' : '',
 			'priority' => 1000,
+			'deps' => ['elgg/likes'],
 		));
 		$return[] = ElggMenuItem::factory(array(
 			'name' => 'unlike',
@@ -122,6 +122,7 @@ function likes_entity_menu_setup($hook, $type, $return, $params) {
 			'title' => elgg_echo('likes:remove'),
 			'item_class' => $hasLiked ? '' : 'hidden',
 			'priority' => 1000,
+			'deps' => ['elgg/likes'],
 		));
 	}
 	
@@ -133,6 +134,7 @@ function likes_entity_menu_setup($hook, $type, $return, $params) {
 			'text' => $count,
 			'href' => false,
 			'priority' => 1001,
+			'deps' => ['elgg/likes'],
 		);
 		$return[] = ElggMenuItem::factory($options);
 	}
@@ -175,6 +177,7 @@ function likes_river_menu_setup($hook, $type, $return, $params) {
 		'title' => elgg_echo('likes:likethis'),
 		'item_class' => $hasLiked ? 'hidden' : '',
 		'priority' => 100,
+		'deps' => ['elgg/likes'],
 	));
 	$return[] = ElggMenuItem::factory(array(
 		'name' => 'unlike',
@@ -183,6 +186,7 @@ function likes_river_menu_setup($hook, $type, $return, $params) {
 		'title' => elgg_echo('likes:remove'),
 		'item_class' => $hasLiked ? '' : 'hidden',
 		'priority' => 100,
+		'deps' => ['elgg/likes'],
 	));
 
 	// likes count
@@ -193,6 +197,7 @@ function likes_river_menu_setup($hook, $type, $return, $params) {
 			'text' => $count,
 			'href' => false,
 			'priority' => 101,
+			'deps' => ['elgg/likes'],
 		));
 	}
 

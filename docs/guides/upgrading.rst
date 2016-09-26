@@ -9,6 +9,262 @@ See the administrator guides for :doc:`how to upgrade a live site </admin/upgrad
    :local:
    :depth: 2
 
+From 2.x to 3.0
+===============
+
+Removed classes
+---------------
+
+ * ``FilePluginFile``: replace with ``ElggFile`` (or load with ``get_entity()``)
+
+Removed views
+-------------
+
+ * ``resources/file/download``
+ * ``input/write_access``: mod/pages now uses the **access:collections:write** plugin hook.
+
+Removed functions/methods
+-------------------------
+
+All the functions in ``engine/lib/deprecated-1.9.php`` were removed. See https://github.com/Elgg/Elgg/blob/2.0/engine/lib/deprecated-1.9.php for these functions. Each ``@deprecated`` declaration includes instructions on what to use instead.
+
+ * ``get_default_filestore``
+ * ``set_default_filestore``
+ * ``ElggFile::setFilestore``: ElggFile objects can no longer use custom filestores.
+ * ``ElggFile::size``: Use ``getSize``
+ * ``ElggDiskFilestore::makeFileMatrix``: Use ``Elgg\EntityDirLocator``
+ * ``ElggData::get``: Usually can be replaced by property read
+ * ``ElggData::getClassName``: Use ``get_class()``
+ * ``ElggData::set``: Usually can be replaced by property write
+ * ``ElggEntity::setURL``: See ``getURL`` for details on the plugin hook
+ * ``ElggMenuBuilder::compareByWeight``: Use ``compareByPriority``
+ * ``ElggMenuItem::getWeight``: Use ``getPriority``
+ * ``ElggMenuItem::getContent``: Use ``elgg_view_menu_item()``
+ * ``ElggMenuItem::setWeight``: Use ``setPriority``
+ * ``ElggRiverItem::getPostedTime``: Use ``getTimePosted``
+ * ``ElggSite::addObject``: Use ``addEntity``
+ * ``ElggSite::addUser``: Use ``addEntity``
+ * ``ElggSite::getExportableValues``: Use ``toObject``
+ * ``ElggSite::getMembers``: Use ``getEntities``
+ * ``ElggSite::getObjects``: Use ``getEntities``
+ * ``ElggSite::listMembers``: Use ``elgg_list_entities_from_relationship()``
+ * ``ElggSite::removeObject``: Use ``removeEntity``
+ * ``ElggSite::removeUser``: Use ``removeEntity``
+ * ``ElggUser::countObjects``: Use ``elgg_get_entities()``
+ * ``Logger::getClassName``: Use ``get_class()``
+ * ``Elgg\Application\Database::getTablePrefix``: Read the ``prefix`` property
+
+Removed global vars
+-------------------
+
+ * ``$DEFAULT_FILE_STORE``
+ * ``$SESSION``: Use the API provided by ``elgg_get_session()``
+
+Removed classes/interfaces
+--------------------------
+
+ * ``Exportable`` and its methods ``export`` and ``getExportableValues``: Use ``toObject``
+ * ``Importable`` and its method ``import``.
+
+Inheritance changes
+-------------------
+
+ * ``ElggData`` (and hence most Elgg domain objects) no longer implements ``Exportable``
+ * ``ElggEntity`` no longer implements ``Importable``
+ * ``ElggGroup`` no longer implements ``Friendable``
+ * ``ElggRelationship`` no longer implements ``Importable``
+ * ``Elgg\Application\Database`` no longer extends ``Elgg\Database``.
+
+Removed JavaScript APIs
+-----------------------
+
+ * ``elgg.widgets``: Use the ``elgg/widgets`` module. The "widgets" layouts do this module automatically
+ * ``lightbox.js``: Use the ``elgg/lightbox`` module as needed
+ * ``lightbox/settings.js``: Use the ``getOptions, ui.lightbox`` JS hook or the ``data-colorbox-opts`` attribute
+ * ``elgg.ui.popupClose``: Use the ``elgg/popup`` module
+ * ``elgg.ui.river``
+ * ``elgg.ui.initDatePicker``: Use the ``input/date`` module
+ * ``elgg.ui.likesPopupHandler``
+ * ``elgg.embed``: Use the ``elgg/embed`` module
+ * ``embed/custom_insert_js``: Use the ``embed, editor`` JS hook
+ * ``elgg/ckeditor/insert.js``
+ * ``likes.js``: The ``elgg/likes`` module is loaded automatically
+ * ``messageboard.js``
+ * ``elgg.messageboard`` is no longer defined.
+
+Removed hooks/events
+--------------------
+
+ * Hook **index, system**: Override the ``resources/index`` view
+ * Hook **object:notifications, <type>**: Use the hook **send:before, notifications**
+ * Event **delete, annotations**: Use **delete, annotation**
+
+APIs that now accept only an ``$options`` array
+-----------------------------------------------
+
+ * ``ElggEntity::getAnnotations``
+ * ``ElggEntity::getEntitiesFromRelationship``
+ * ``ElggGroup::getMembers``
+ * ``ElggUser::getGroups``
+ * ``ElggUser::getFriends`` (as part of ``Friendable``)
+ * ``ElggUser::getFriendsOf`` (as part of ``Friendable``)
+ * ``ElggUser::getFriendsObjects`` (as part of ``Friendable``)
+ * ``ElggUser::getObjects`` (as part of ``Friendable``)
+ * ``find_active_users``
+
+Plugin functions that now require an explicit ``$plugin_id``
+------------------------------------------------------------
+
+ * ``elgg_get_all_plugin_user_settings``
+ * ``elgg_set_plugin_user_setting``
+ * ``elgg_unset_plugin_user_setting``
+ * ``elgg_get_plugin_user_setting``
+ * ``elgg_set_plugin_setting``
+ * ``elgg_get_plugin_setting``
+ * ``elgg_unset_plugin_setting``
+ * ``elgg_unset_all_plugin_settings``
+
+Class constructors that now accept only a ``stdClass`` object or ``null``
+-------------------------------------------------------------------------
+
+ * ``ElggAnnotation``: No longer accepts an annotation ID
+ * ``ElggGroup``: No longer accepts a GUID
+ * ``ElggMetadata``: No longer accepts a metadata ID
+ * ``ElggObject``: No longer accepts a GUID
+ * ``ElggRelationship``: No longer accepts a relationship ID or ``null``
+ * ``ElggSite``: No longer accepts a GUID or URL
+ * ``ElggUser``: No longer accepts a GUID or username
+
+Miscellaneous API changes
+-------------------------
+
+ * ``ElggGroup::removeObjectFromGroup`` requires passing in an ``ElggObject`` (no longer accepts a GUID)
+ * ``elgg_view_icon`` no longer supports ``true`` as the 2nd argument
+ * ``elgg_list_entities`` no longer supports the option ``view_type_toggle``
+ * ``elgg_list_registered_entities`` no longer supports the option ``view_type_toggle``
+ * ``elgg_log`` no longer accepts the level ``"DEBUG"``
+ * ``elgg_gatekeeper`` and ``elgg_admin_gatekeeper`` no longer report ``login`` or ``admin`` as forward reason, but ``403``
+ * ``Application::getDb()`` no longer returns an instance of ``Elgg\Database``, but rather a ``Elgg\Application\Database``
+ * ``$CONFIG`` is no longer available as a local variable inside plugin ``start.php`` files.
+ * ``elgg_get_config('siteemail')`` is no longer available. Use ``elgg_get_site_entity()->email``.
+ * The URL endpoints ``js/`` and ``css/`` are no longer supported. Use ``elgg_get_simplecache_url()``.
+
+JavaScript hook calling order may change
+----------------------------------------
+
+When registering for hooks, the ``all`` keyword for wildcard matching no longer has any effect
+on the order that handlers are called. To ensure your handler is called last, you must give it the
+highest priority of all matching handlers, or to ensure your handler is called first, you must give
+it the lowest priority of all matching handlers.
+
+If handlers were registered with the same priority, these are called in the order they were registered.
+
+To emulate prior behavior, Elgg core handlers registered with the ``all`` keyword have been raised in
+priority. Some of these handlers will most likely be called in a different order.
+
+
+From 2.2 to 2.3
+===============
+
+Deprecated APIs
+---------------
+
+ * Registering for ``to:object`` hook by the extender name: Use ``to:object, annotation`` and ``to:object, metadata`` hooks instead.
+ * ``ajax_forward_hook()``: No longer used as handler for `'forward','all'` hook. Ajax response is now wrapped by the ``ResponseFactory``
+ * ``ajax_action_hook()``: No longer used as handler for `'action','all'` hook. Output buffering now starts before the hook is triggered in ``ActionsService``
+ * ``elgg_error_page_handler()``: No longer used as a handler for `'forward',<error_code>` hooks
+ * ``get_uploaded_file()`` is deprecated: Use new file uploads API instead
+ * ``get_user_notification_settings()`` is deprecated: Use ``ElggUser::getNotificationSettings()``
+ * ``set_user_notification_setting()`` is deprecated: Use ``ElggUser::setNotificationSetting()``
+ * ``pagesetup, system`` event: Use the menu or page shell hooks instead.
+ * ``elgg.walled_garden`` JavaScript is deprecated: Use ``elgg/walled_garden`` AMD module instead.
+ * ``elgg()->getDb()->getTableprefix()`` is deprecated: Use ``elgg_get_config('dbprefix')``.
+ * Private ``update_entity_last_action()`` is deprecated: Refrain from manually updating last action timestamp.
+ * Setting non-public ``access_id`` on metadata is deprecated. See below.
+
+Deprecated Views
+----------------
+
+ * ``wallled_garden.js`` is deprecated: Use ``elgg/walled_garden`` module instead.
+
+New API for page and action handling
+------------------------------------
+
+Page handlers and action script files should now return an instance of ``\Elgg\Http\ResponseBuilder``.
+Plugins should use the following convenience functions to build responses:
+
+ * ``elgg_ok_response()`` sends a 2xx response with HTML (page handler) or JSON data (actions)
+ * ``elgg_error_response()`` sends a 4xx or 5xx response without content/data
+ * ``elgg_redirect_response()`` silently redirects the request
+
+New API for working with file uploads
+-------------------------------------
+
+ * ``elgg_get_uploaded_files()`` - returns an array of Symfony uploaded file objects
+ * ``ElggFile::acceptUploadedFile()`` - moves an uploaded file to Elgg's filestore
+
+New API for events
+------------------
+
+ * ``elgg_clear_event_handlers()`` - similar to ``elgg_clear_plugin_hook_handlers`` this functions removes all registered event handlers
+
+New API for signing URLs
+------------------------
+
+URLs can now be signed with a SHA-256 HMAC key and validated at any time before URL expiry. This feature can be used to tokenize action URLs in email notifications, as well as other uses outside of the Elgg installation.
+
+ * `elgg_http_get_signed_url()` - signs the URL with HMAC key
+ * `elgg_http_validate_signed_url()` - validates the signed URL
+ * `elgg_signed_request_gatekeeper()` - gatekeeper that validates the signature of the current request
+
+Extendable form views
+---------------------
+
+Form footer rendering can now be deferred until the form view and its extensions have finished rendering. This allows plugins to collaborate on form views without breaking the markup logic.
+
+ * ``elgg_set_form_footer()`` - sets form footer for deferred rendering
+ * ``elgg_get_form_footer()`` - returns currently set form footer
+
+Metadata ``access_id``
+----------------------
+
+It's now deprecated to create metadata with an explicit ``access_id`` value other than ``ACCESS_PUBLIC``.
+
+In Elgg 3.0, metadata will not be access controlled, and will be available in all contexts. If your plugin relies on access control of metadata, it would be wise to migrate storage to annotations or entities instead.
+
+New API for extracting class names from arrays
+----------------------------------------------
+
+Similar to ``elgg_extract()``, ``elgg_extract_class()`` extracts the "class" key (if present), merges into existing class names, and always returns an array.
+
+Notifications
+-------------
+
+ * A high level ``'prepare','notification'`` hook is now triggered for instant and subscription notifications and can be used to alter notification objects irrespective of their type.
+ * ``'format','notification:<method>'`` hook is now triggered for instant and subscription notifications and can be used to format the notification (e.g. strip HTML tags, wrap the notification body in a template etc).
+ * Instant notifications are now handled by the notifications service, hence almost all hooks applicable to subscription notifications also apply to instant notifications.
+ * ``elgg_get_notification_methods()`` can be used to obtain registered notification methods
+ * Added ``ElggUser::getNotificationSettings()`` and ``ElggUser::setNotificationSetting()``
+
+Entity list functions can output tables
+---------------------------------------
+
+In functions like ``elgg_list_entities($options)``, table output is possible by setting
+``$options['list_type'] = 'table'`` and providing an array of table columns as ``$options['columns']``.
+Each column is an ``Elgg\Views\TableColumn`` object, usually created via methods on the service
+``elgg()->table_columns``.
+
+Plugins can provide or alter these factory methods (see ``Elgg\Views\TableColumn\ColumnFactory``).
+See the view ``admin/users/newest`` for a usage example.
+
+API to alter registration and login URL
+---------------------------------------
+
+ * ``elgg_get_registration_url()`` should be used to obtain site's registration URL
+ * ``elgg_get_login_url()`` should be used to obtain site's login URL
+ * ``registration_url, site`` hook can be used to alter the default registration URL
+ * ``login_url, site`` hook can be used to alter the default login URL
+
 From 2.1 to 2.2
 ===============
 
@@ -42,7 +298,7 @@ Added ``elgg/lightbox`` module
 New :doc:`elgg/lightbox module <javascript>` can be used to open and close the lightbox programmatically.
 
 Added ``elgg/embed`` module
-------------------------------
+---------------------------
 
 Even though rarely necessary, ``elgg/embed`` AMD module can be used to access the embed methods programmatically. The module bootstraps itself when necessary and is unlikely to require further decoration.
 
@@ -60,14 +316,13 @@ New API for handling entity icons
  * ``ElggEntity::hasIcon()`` - checks if an icon with given size has been created
  * ``elgg_get_embed_url()`` - can be used to return an embed URL for an entity's icon (served via `/serve-icon` handler)
 
-
 Removed APIs
 ------------
 
 Just a warning that the private entity cache functions (e.g. ``_elgg_retrieve_cached_entity``) have been removed. Some plugins may have been using them. Plugins should not use private APIs as they will more often be removed without notice.
 
 Improved ``elgg/ckeditor`` module
------------------------------------
+---------------------------------
 
 :doc:`elgg/ckeditor module <javascript>` can now be used to add WYSIWYG to a textarea programmatically with ``elgg/ckeditor#bind``.
 

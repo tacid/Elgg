@@ -21,25 +21,15 @@ class ElggDiskFilestore extends \ElggFilestore {
 	const BUCKET_SIZE = 5000;
 
 	/**
-	 * Global Elgg configuration
-	 *
-	 * @var \stdClass
-	 */
-	private $CONFIG;
-
-	/**
 	 * Construct a disk filestore using the given directory root.
 	 *
 	 * @param string $directory_root Root directory, must end in "/"
 	 */
 	public function __construct($directory_root = "") {
-		global $CONFIG;
-		$this->CONFIG = $CONFIG;
-
 		if ($directory_root) {
 			$this->dir_root = $directory_root;
 		} else {
-			$this->dir_root = $this->CONFIG->dataroot;
+			$this->dir_root = _elgg_services()->config->getDataPath();
 		}
 	}
 
@@ -321,31 +311,5 @@ class ElggDiskFilestore extends \ElggFilestore {
 		}
 
 		return false;
-	}
-
-
-	
-	/**
-	 * Deprecated methods
-	 */
-
-	/**
-	 * Construct a file path matrix for an entity.
-	 *
-	 * @param int $guid The guid of the entity to store the data under.
-	 *
-	 * @return string The path where the entity's data will be stored relative to the data dir.
-	 * @deprecated 1.9 Use \Elgg\EntityDirLocator()
-	 */
-	protected function makeFileMatrix($guid) {
-		elgg_deprecated_notice('\ElggDiskFilestore::makeFileMatrix() is deprecated by \Elgg\EntityDirLocator', 1.9);
-		$entity = get_entity($guid);
-
-		if (!$entity instanceof \ElggEntity) {
-			return false;
-		}
-
-		$dir = new \Elgg\EntityDirLocator($guid);
-		return $dir->getPath();
 	}
 }

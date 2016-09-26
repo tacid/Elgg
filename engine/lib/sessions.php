@@ -9,12 +9,6 @@
  */
 
 /**
- * Elgg magic session
- * @deprecated 1.9
- */
-global $SESSION;
-
-/**
  * Gets Elgg's session object
  *
  * @return \ElggSession
@@ -354,13 +348,6 @@ function login(\ElggUser $user, $persistent = false) {
 
 	elgg_trigger_after_event('login', 'user', $user);
 
-	// if memcache is enabled, invalidate the user in memcache @see https://github.com/Elgg/Elgg/issues/3143
-	if (is_memcache_available()) {
-		$guid = $user->getGUID();
-		// this needs to happen with a shutdown function because of the timing with set_last_login()
-		register_shutdown_function("_elgg_invalidate_memcache_for_entity", $guid);
-	}
-
 	return true;
 }
 
@@ -437,10 +424,6 @@ function _elgg_session_boot() {
 	if ($session->has('guid')) {
 		set_last_action($session->get('guid'));
 	}
-
-	// initialize the deprecated global session wrapper
-	global $SESSION;
-	$SESSION = new \Elgg\DeprecationWrapper($session, "\$SESSION is deprecated", 1.9);
 
 	// logout a user with open session who has been banned
 	$user = $session->getLoggedInUser();

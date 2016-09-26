@@ -8,16 +8,6 @@ List of plugin hooks in core
 System hooks
 ============
 
-**email, system**
-	Triggered when sending email. ``$params`` contains:
-
-	* to
-	* from
-	* subject
-	* body
-	* headers
-	* params
-
 **page_owner, system**
 	Filter the page_owner for the current page. No options are passed.
 
@@ -95,21 +85,11 @@ System hooks
 	``elgg_view_menu()`` and ``elgg()->menus->prepareMenu()``.
 
 **creating, river**
-	Triggered before a river item is created. Return false to prevent river item from being created.
+	The options for ``elgg_create_river_item`` are filtered through this hook. You may alter values
+	or return ``false`` to cancel the item creation.
 
 **simplecache:generate, <view>**
 	Triggered when generating the cached content of a view.
-
-**get, subscriptions**
-	Filter notification subscriptions for users for the Elgg_Notifications_Event ``$params['event']``.
-	Return an array like:
-
-.. code:: php
-
-	array(
-		<user guid> => array('subscription', 'types'),
-		<user_guid2> => array('email', 'sms', 'ajax')
-	);
 
 **prepare, breadcrumbs**
     In elgg_get_breadcrumbs(), this filters the registered breadcrumbs before
@@ -122,6 +102,16 @@ System hooks
 
 **elgg.data, page**
    Filters uncached, page-specific configuration data to pass to the client. :ref:`More info <guides/javascript#config>`
+
+**registration_url, site**
+   Filters site's registration URL. Can be used by plugins to attach invitation codes, referrer codes etc. to the registration URL.
+   ``$params`` array contains an array of query elements added to the registration URL by the invoking script.
+   The hook must return an absolute URL to the registration page.
+
+**login_url, site**
+   Filters site's login URL.
+   ``$params`` array contains an array of query elements added to the login URL by the invoking script.
+   The hook must return an absolute URL of the login page.
 
 User hooks
 ==========
@@ -190,6 +180,12 @@ Action hooks
 **forward, <reason>**
 	Filter the URL to forward a user to when ``forward($url, $reason)`` is called.
 
+**response, action:<action>**
+    Filter an instance of ``\Elgg\Http\ResponseBuilder`` before it is sent to the client.
+    This hook can be used to modify response content, status code, forward URL, or set additional response headers.
+    Note that the ``<action>`` value is parsed from the request URL, therefore you may not be able to filter
+    the responses of `action()` calls if they are nested within the another action script file.
+
 .. _guides/hooks-list#ajax:
 
 Ajax
@@ -214,10 +210,27 @@ Ajax
 	Plugins can alter the output, forward URL, system messages, and errors. For the ``elgg/Ajax`` AMD module,
 	use the ``ajax_response`` hook documented above.
 
+
 .. _guides/hooks-list#permission-hooks:
 
 Permission hooks
 ================
+
+**container_logic_check, <entity_type>**
+	Triggered by ``ElggEntity:canWriteToContainer()`` before triggering ``permissions_check`` and ``container_permissions_check``
+	hooks. Unlike permissions hooks, logic check can be used to prevent certain entity types from being contained
+	by other entity types, e.g. discussion replies should only be contained by discussions. This hook can also be
+	used to apply status logic, e.g. do disallow new replies for closed discussions.
+
+	The handler should return ``false`` to prevent an entity from containing another entity. The default value passed to the hook
+	is ``null``, so the handler can check if another hook has modified the value by checking if return value is set.
+	Should this hook return ``false``, ``container_permissions_check`` and ``permissions_check`` hooks will not be triggered.
+
+	The ``$params`` array will contain:
+
+	 * ``container`` - An entity that will be used as a container
+	 * ``user`` - User who will own the entity to be written to container
+	 * ``subtype`` - Subtype of the entity to be written to container (entity type is assumed from hook type)
 
 **container_permissions_check, <entity_type>**
 	Return boolean for if the user ``$params['user']`` can use the entity ``$params['container']``
@@ -227,11 +240,23 @@ Permission hooks
 	matching the logged in user, this hook is called *twice*, and in the first call ``$params['container']``
 	will be the *owner*, not the entity's real container.
 
+	The ``$params`` array will contain:
+
+	 * ``container`` - An entity that will be used as a container
+	 * ``user`` - User who will own the entity to be written to container
+	 * ``subtype`` - Subtype of the entity to be written to container (entity type is assumed from hook type)
+
 **permissions_check, <entity_type>**
 	Return boolean for if the user ``$params['user']`` can edit the entity ``$params['entity']``.
 
 **permissions_check:delete, <entity_type>**
 	Return boolean for if the user ``$params['user']`` can delete the entity ``$params['entity']``. Defaults to ``$entity->canEdit()``.
+
+**permissions_check:delete, river**
+	Return boolean for if the user ``$params['user']`` can delete the river item ``$params['item']``. Defaults to
+	``true`` for admins and ``false`` for other users.
+
+	.. note:: This check is not performed when using the deprecated ``elgg_delete_river()``.
 
 **permissions_check, widget_layout**
 	Return boolean for if ``$params['user']`` can edit the widgets in the context passed as
@@ -304,19 +329,156 @@ Permission hooks
     Filters the result of ``elgg_entity_gatekeeper()`` to prevent access to an entity that user would otherwise have access to. A handler should return false to deny access to an entity.
 
 
+Notifications
+=============
+
+These hooks are listed chronologically in the lifetime of the notification event.
+Note that not all hooks apply to instant notifications.
+
+**enqueue, notification**
+	Can be used to prevent a notification event from sending **subscription** notifications.
+	Hook handler must return ``false`` to prevent a subscription notification event from being enqueued.
+
+	``$params`` array includes:
+
+	 * ``object`` - object of the notification event
+	 * ``action`` - action that triggered the notification event. E.g. corresponds to ``publish`` when ``elgg_trigger_event('publish', 'object', $object)`` is called
+
+**get, subscriptions**
+	Filters subscribers of the notification event.
+	Applies to **subscriptions** and **instant** notifications.
+	In case of a subscription event, by default, the subscribers list consists of the users subscribed to the container entity of the event object.
+	In case of an instant notification event, the subscribers list consists of the users passed as recipients to ``notify_user()``
+
+	``$params`` array includes:
+
+	 * ``event`` - ``\Elgg\Notifications\NotificationEvent`` instance that describes the notification event
+	 * ``origin`` - ``subscriptions_service`` or ``instant_notifications``
+	 * ``methods_override`` - delivery method preference for instant notifications
+
+	Handlers must return an array in the form:
+
+.. code:: php
+
+	array(
+		<user guid> => array('sms'),
+		<user_guid2> => array('email', 'sms', 'ajax')
+	);
+
+
+**send:before, notifications**
+	Triggered before the notification event queue is processed. Can be used to terminate the notification event.
+	Applies to **subscriptions** and **instant** notifications.
+
+	``$params`` array includes:
+
+	 * ``event`` - ``\Elgg\Notifications\NotificationEvent`` instance that describes the notification event
+	 * ``subscriptions`` - a list of subscriptions. See ``'get', 'subscriptions'`` hook for details
+
+**prepare, notification**
+	A high level hook that can be used to alter an instance of ``\Elgg\Notifications\Notification`` before it is sent to the user.
+	Applies to **subscriptions** and **instant** notifications.
+	This hook is triggered before a more granular ``'prepare', 'notification:<action>:<entity_type>:<entity_subtype>'`` and after ``'send:before', 'notifications``.
+	Hook handler should return an altered notification object.
+
+	``$params`` may vary based on the notification type and may include:
+
+	 * ``event`` - ``\Elgg\Notifications\NotificationEvent`` instance that describes the notification event
+	 * ``object`` - object of the notification ``event``. Can be ``null`` for instant notifications
+	 * ``action`` - action that triggered the notification ``event``. May default to ``notify_user`` for instant notifications
+	 * ``method`` - delivery method (e.g. ``email``, ``site``)
+	 * ``sender`` - sender
+	 * ``recipient`` - recipient
+	 * ``language`` - language of the notification (recipient's language)
+	 * ``origin`` - ``subscriptions_service`` or ``instant_notifications``
+
+**prepare, notification:<action>:<entity_type>:<entity_type>**
+	A granular hook that can be used to filter a notification ``\Elgg\Notifications\Notification`` before it is sent to the user.
+	Applies to **subscriptions** and **instant** notifications.
+	In case of instant notifications that have not received an object, the hook will be called as ``'prepare', 'notification:<action>'``.
+	In case of instant notifications that have not received an action name, it will default to ``notify_user``.
+
+	``$params`` include:
+
+	 * ``event`` - ``\Elgg\Notifications\NotificationEvent`` instance that describes the notification event
+	 * ``object`` - object of the notification ``event``. Can be ``null`` for instant notifications
+	 * ``action`` - action that triggered the notification ``event``. May default to ``notify_user`` for instant notifications
+	 * ``method`` - delivery method (e.g. ``email``, ``site``)
+	 * ``sender`` - sender
+	 * ``recipient`` - recipient
+	 * ``language`` - language of the notification (recipient's language)
+	 * ``origin`` - ``subscriptions_service`` or ``instant_notifications``
+
+**format, notification:<method>**
+	This hook can be used to format a notification before it is passed to the ``'send', 'notification:<method>'`` hook.
+	Applies to **subscriptions** and **instant** notifications.
+	The hook handler should return an instance of ``\Elgg\Notifications\Notification``.
+	The hook does not receive any ``$params``.
+	Some of the use cases include:
+
+	 * Strip tags from notification title and body for plaintext email notifications
+	 * Inline HTML styles for HTML email notifications
+	 * Wrap notification in a template, add signature etc.
+
+**send, notification:<method>**
+	Delivers a notification.
+	Applies to **subscriptions** and **instant** notifications.
+	The handler must return ``true`` or ``false`` indicating the success of the delivery.
+
+	``$params`` array includes:
+
+	 * ``notification`` - a notification object ``\Elgg\Notifications\Notification``
+
+**email, system**
+	Triggered by ``elgg_send_email()``.
+	Applies to **subscriptions** and **instant** notifications with ``email`` method.
+	This hook can be used to alter email parameters (subject, body, headers etc) - the handler should return an array of altered parameters.
+	This hook can also be used to implement a custom email transport (in place of Elgg's default plaintext ``\Zend\Mail\Transport\Sendmail``) - the handler must return ``true`` or ``false`` to indicate whether the email was sent using a custom transport.
+
+	``$params`` contains:
+
+	 * ``to`` - email address or string in the form ``Name <name@example.org>`` of the recipient
+	 * ``from`` - email address or string in the form ``Name <name@example.org>`` of the sender
+	 * ``subject`` - subject line of the email
+	 * ``body`` - body of the email
+	 * ``headers`` - an array of headers
+	 * ``params`` - other parameters inherited from the notification object or passed directly to ``elgg_send_email()``
+
+**send:after, notifications**
+	Triggered after all notifications in the queue for the notifications event have been processed.
+	Applies to **subscriptions** and **instant** notifications.
+
+	``$params`` array includes:
+
+	 * ``event`` - ``\Elgg\Notifications\NotificationEvent`` instance that describes the notification event
+	 * ``subscriptions`` - a list of subscriptions. See ``'get', 'subscriptions'`` hook for details
+	 * ``deliveries`` - a matrix of delivery statuses by user for each delivery method
+
+
 Routing
 =======
 
 **route, <identifier>**
     Allows applying logic or returning a response before the page handler is called. See :doc:`routing`
     for details.
+    Note that plugins using this hook to rewrite paths, will not be able to filter the response object by
+    its final path and should either switch to ``route:rewrite, <identifier>`` hook or use ``response, path:<path>`` hook for
+    the original path.
 
 **route:rewrite, <identifier>**
 	Allows altering the site-relative URL path. See :doc:`routing` for details.
 
+**response, path:<path>**
+    Filter an instance of ``\Elgg\Http\ResponseBuilder`` before it is sent to the client.
+    This hook type will only be used if the path did not start with "action/" or "ajax/".
+    This hook can be used to modify response content, status code, forward URL, or set additional response headers.
+    Note that the ``<path>`` value is parsed from the request URL, therefore plugins using the ``route`` hook should
+    use the original ``<path>`` to filter the response, or switch to using the ``route:rewrite`` hook.
+
 **ajax_response, path:<path>**
     Filters ajax responses before they're sent back to the ``elgg/Ajax`` module. This hook type will
     only be used if the path did not start with "action/" or "ajax/".
+
 
 .. _guides/hooks-list#views:
 
@@ -376,6 +538,22 @@ Views
 **ajax_response, form:<action>**
     Filters ``ajax/form/`` responses before they're sent back to the ``elgg/Ajax`` module.
 
+**response, view:<view_name>**
+    Filter an instance of ``\Elgg\Http\ResponseBuilder`` before it is sent to the client.
+    Applies to request to ``/ajax/view/<view_name>``.
+    This hook can be used to modify response content, status code, forward URL, or set additional response headers.
+
+**response, form:<form_name>**
+    Filter an instance of ``\Elgg\Http\ResponseBuilder`` before it is sent to the client.
+    Applies to request to ``/ajax/form/<form_name>``.
+    This hook can be used to modify response content, status code, forward URL, or set additional response headers.
+
+**table_columns:call, <name>**
+    When the method ``elgg()->table_columns->$name()`` is called, this hook is called to allow
+    plugins to override or provide an implementation. Handlers receive the method arguments via
+    ``$params['arguments']`` and should return an instance of ``Elgg\Views\TableColumn`` if they
+    wish to specify the column directly.
+
 Files
 =====
 
@@ -389,6 +567,18 @@ Files
     ``document`` or ``image``. The bundled file plugin and other-third party plugins usually store
     ``simpletype`` metadata on file entities and make use of it when serving icons and constructing
     ``ege*`` filters and menus.
+
+**upload, file**
+    Allows plugins to implement custom logic for moving an uploaded file into an instance of ``ElggFile``.
+    The handler must return ``true`` to indicate that the uploaded file was moved.
+    The handler must return ``false`` to indicate that the uploaded file could not be moved.
+    Other returns will indicate that ``ElggFile::acceptUploadedFile`` should proceed with the
+    default upload logic.
+
+    ``$params`` array includes:
+
+     * ``file`` - instance of ``ElggFile`` to write to
+     * ``upload`` - instance of Symfony's ``UploadedFile``
 
 .. _guides/hooks-list#other:
 

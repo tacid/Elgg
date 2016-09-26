@@ -131,16 +131,10 @@ function get_user_by_email($email) {
  *   offset  (int)  => Offset (default 0)
  *   count   (bool) => Return a count instead of users? (default false)
  *
- *   Formerly this was the seconds parameter.
- *
- * @param int   $limit   Limit (deprecated usage, use $options)
- * @param int   $offset  Offset (deprecated usage, use $options)
- * @param bool  $count   Count (deprecated usage, use $options)
- *
  * @return \ElggUser[]|int
  */
-function find_active_users($options = array(), $limit = 10, $offset = 0, $count = false) {
-	return _elgg_services()->usersTable->findActive($options, $limit, $offset, $count);
+function find_active_users(array $options = []) {
+	return _elgg_services()->usersTable->findActive($options);
 }
 
 /**
@@ -399,25 +393,62 @@ function elgg_user_account_page_handler($page_elements, $handler) {
 }
 
 /**
+ * Returns site's registration URL
+ * Triggers a 'registration_url', 'site' plugin hook that can be used by
+ * plugins to alter the default registration URL and append query elements, such as
+ * an invitation code and inviting user's guid
+ *
+ * @param array  $query    An array of query elements
+ * @param string $fragment Fragment identifier
+ * @return string
+ */
+function elgg_get_registration_url(array $query = [], $fragment = '') {
+	$url = elgg_normalize_url('register');
+	$url = elgg_http_add_url_query_elements($url, $query) . $fragment;
+	return elgg_trigger_plugin_hook('registration_url', 'site', $query, $url);
+}
+
+/**
+ * Returns site's login URL
+ * Triggers a 'login_url', 'site' plugin hook that can be used by
+ * plugins to alter the default login URL
+ *
+ * @param array  $query    An array of query elements
+ * @param string $fragment Fragment identifier (e.g. #login-dropdown-box)
+ * @return string
+ */
+function elgg_get_login_url(array $query = [], $fragment = '') {
+	$url = elgg_normalize_url('login');
+	$url = elgg_http_add_url_query_elements($url, $query) . $fragment;
+	return elgg_trigger_plugin_hook('login_url', 'site', $query, $url);
+}
+
+/**
  * Sets the last action time of the given user to right now.
  *
  * @param int $user_guid The user GUID
- *
  * @return void
  */
 function set_last_action($user_guid) {
-	_elgg_services()->usersTable->setLastAction($user_guid);
+	$user = get_user($user_guid);
+	if (!$user) {
+		return;
+	}
+	_elgg_services()->usersTable->setLastAction($user);
 }
 
 /**
  * Sets the last logon time of the given user to right now.
  *
  * @param int $user_guid The user GUID
- *
  * @return void
  */
 function set_last_login($user_guid) {
-	_elgg_services()->usersTable->setLastLogin($user_guid);
+	$user = get_user($user_guid);
+	if (!$user) {
+		return;
+	}
+	_elgg_services()->usersTable->setLastLogin($user);
 }
 
 /**

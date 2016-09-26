@@ -91,10 +91,7 @@ function elgg_disable_system_cache() {
  * Registers a view to simple cache.
  *
  * Simple cache is a caching mechanism that saves the output of
- * a view and its extensions into a file.  If the view is called
- * by the {@link engine/handlers/cache_handler.php} file, the Elgg
- * engine will not be loaded and the contents of the view will returned
- * from file.
+ * a view and its extensions into a file.
  *
  * @warning Simple cached views must take no parameters and return
  * the same content no matter who is logged in.
@@ -238,6 +235,18 @@ function _elgg_is_cache_symlinked() {
 	}
 	$headers = get_headers(elgg_get_simplecache_url('elgg.js'));
 	return substr($headers[0], 9, 3) == 200;
+}
+
+/**
+ * Invalidate entity cache
+ *
+ * @param int $entity_guid The GUID of the entity to invalidate
+ *
+ * @return void
+ * @access private
+ */
+function _elgg_invalidate_cache_for_entity($entity_guid) {
+	_elgg_services()->entityCache->remove($entity_guid);
 }
 
 /**

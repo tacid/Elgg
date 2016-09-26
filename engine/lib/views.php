@@ -48,6 +48,7 @@
 
 use Elgg\Menu\Menu;
 use Elgg\Menu\UnpreparedMenu;
+use Elgg\Includer;
 
 /**
  * The viewtype override.
@@ -241,11 +242,8 @@ function elgg_unregister_ajax_view($view) {
  * @since 1.9.0
  */
 function elgg_register_external_view($view, $cacheable = false) {
-	if (!isset($GLOBALS['_ELGG']->allowed_ajax_views)) {
-		$GLOBALS['_ELGG']->allowed_ajax_views = array();
-	}
-
-	$GLOBALS['_ELGG']->allowed_ajax_views[$view] = true;
+	
+	_elgg_services()->ajax->registerView($view);
 
 	if ($cacheable) {
 		_elgg_services()->views->registerCacheableView($view);
@@ -260,9 +258,7 @@ function elgg_register_external_view($view, $cacheable = false) {
  * @since 1.9.0
  */
 function elgg_unregister_external_view($view) {
-	if (isset($GLOBALS['_ELGG']->allowed_ajax_views[$view])) {
-		unset($GLOBALS['_ELGG']->allowed_ajax_views[$view]);
-	}
+	_elgg_services()->ajax->unregisterView($view);
 }
 
 /**
@@ -270,8 +266,6 @@ function elgg_unregister_external_view($view) {
  *
  * Views are expected to be in plugin_name/views/.  This function can
  * be used to change that location.
- *
- * @note Internal: Core view locations are stored in $CONFIG->view_path.
  *
  * @tip This is useful to optionally register views in a plugin.
  *
@@ -398,6 +392,22 @@ function elgg_extend_view($view, $view_extension, $priority = 501) {
  */
 function elgg_unextend_view($view, $view_extension) {
 	return _elgg_services()->views->unextendView($view, $view_extension);
+}
+
+/**
+ * Get the views (and priorities) that extend a view.
+ *
+ * @note extensions may change anytime, especially during the [init, system] event
+ *
+ * @param string $view View name
+ *
+ * @return string[] Keys returned are view priorities.
+ * @since 2.3
+ */
+function elgg_get_view_extensions($view) {
+	$list = _elgg_services()->views->getViewList($view);
+	unset($list[500]);
+	return $list;
 }
 
 /**
@@ -724,12 +734,31 @@ function elgg_view_layout($layout_name, $vars = array()) {
  * to modify the structure of the menu (sort it, remove items, set variables on
  * the menu items).
  *
+ * Preset (unprepared) menu items passed to the this function with the $vars
+ * argument, will be merged with the registered items (registered with
+ * elgg_register_menu_item()). The combined set of menu items will be passed
+ * to 'register', 'menu:<menu_name>' hook.
+ *
+ * Plugins that pass preset menu items to this function and do not wish to be
+ * affected by plugin hooks (e.g. if you are displaying multiple menus with
+ * the same name on the page) should instead choose a unqie menu name
+ * and define a menu_view argument to render menus consistently.
+ * For example, if you have multiple 'filter' menus on the page:
+ * <code>
+ *    elgg_view_menu("filter:$uid", [
+ *        'items' => $items,
+ *        'menu_view' => 'navigation/menu/filter',
+ *    ]);
+ * </code>
+ *
  * elgg_view_menu() uses views in navigation/menu
  *
  * @param string|Menu|UnpreparedMenu $menu Menu name (or object)
  * @param array                      $vars An associative array of display options for the menu.
  *
  *                          Options include:
+ *                              items => an array of unprepared menu items
+ *                                       as ElggMenuItem or menu item factory options
  *                              sort_by => string or php callback
  *                                  string options: 'name', 'priority', 'title' (default),
  *                                  'register' (registration order) or a
@@ -737,12 +766,17 @@ function elgg_view_layout($layout_name, $vars = array()) {
  *                              handler: string the page handler to build action URLs
  *                              entity: \ElggEntity to use to build action URLs
  *                              class: string the class for the entire menu.
+ *                              menu_view: name of the view to be used to render the menu
  *                              show_section_headers: bool show headers before menu sections.
  *
  * @return string
  * @since 1.8.0
  */
 function elgg_view_menu($menu, array $vars = array()) {
+
+	$menu_view = elgg_extract('menu_view', $vars);
+	unset($vars['menu_view']);
+
 	if (is_string($menu)) {
 		$menu = _elgg_services()->menus->getMenu($menu, $vars);
 
@@ -755,11 +789,18 @@ function elgg_view_menu($menu, array $vars = array()) {
 	}
 
 	$name = $menu->getName();
+	$params = $menu->getParams();
 
-	if (elgg_view_exists("navigation/menu/$name")) {
-		return elgg_view("navigation/menu/$name", $menu->getParams());
-	} else {
-		return elgg_view("navigation/menu/default", $menu->getParams());
+	$views = [
+		$menu_view,
+		"navigation/menu/$name",
+		'navigation/menu/default',
+	];
+
+	foreach ($views as $view) {
+		if (elgg_view_exists($view)) {
+			return elgg_view($view, $params);
+		}
 	}
 }
 
@@ -1028,10 +1069,12 @@ function elgg_view_entity_list($entities, array $vars = array()) {
 		$vars["pagination"] = false;
 	}
 
-	if ($vars['list_type'] != 'list') {
-		return elgg_view('page/components/gallery', $vars);
-	} else {
+	if ($vars['list_type'] == 'table') {
+		return elgg_view('page/components/table', $vars);
+	} elseif ($vars['list_type'] == 'list') {
 		return elgg_view('page/components/list', $vars);
+	} else {
+		return elgg_view('page/components/gallery', $vars);
 	}
 }
 
@@ -1300,21 +1343,28 @@ function elgg_view_river_item($item, array $vars = array()) {
  * @return string The complete form
  */
 function elgg_view_form($action, $form_vars = array(), $body_vars = array()) {
-	global $CONFIG;
+	return _elgg_services()->forms->render($action, $form_vars, $body_vars);
+}
 
-	$defaults = array(
-		'action' => $CONFIG->wwwroot . "action/$action",
-		'body' => elgg_view("forms/$action", $body_vars)
-	);
+/**
+ * Sets form footer and defers its rendering until the form view and extensions have been rendered.
+ * Deferring footer rendering allows plugins to extend the form view while maintaining
+ * logical DOM structure.
+ * Footer will be rendered using 'elements/forms/footer' view after form body has finished rendering
+ *
+ * @param string $footer Footer
+ * @return bool
+ */
+function elgg_set_form_footer($footer = '') {
+	return _elgg_services()->forms->setFooter($footer);
+}
 
-	// append elgg-form class to any class options set
-	$form_vars['class'] = (array) elgg_extract('class', $form_vars, []);
-	$form_vars['class'][] = 'elgg-form-' . preg_replace('/[^a-z0-9]/i', '-', $action);
-	
-	$form_vars = array_merge($defaults, $form_vars);
-	$form_vars['action_name'] = $action;
-
-	return elgg_view('input/form', $form_vars);
+/**
+ * Returns currently set footer, or false if not in the form rendering stack
+ * @return string|false
+ */
+function elgg_get_form_footer() {
+	return _elgg_services()->forms->getFooter();
 }
 
 /**
@@ -1447,11 +1497,6 @@ function elgg_view_list_item($item, array $vars = array()) {
 function elgg_view_icon($name, $vars = array()) {
 	if (empty($vars)) {
 		$vars = array();
-	}
-
-	if ($vars === true) {
-		elgg_deprecated_notice("Using a boolean to float the icon is deprecated. Use the class float.", 1.9);
-		$vars = array('class' => 'float');
 	}
 
 	if (is_string($vars)) {
@@ -1704,7 +1749,7 @@ function elgg_views_boot() {
 		// Core view definitions in /engine/views.php
 		$file = dirname(__DIR__) . '/views.php';
 		if (is_file($file)) {
-			$spec = (include $file);
+			$spec = Includer::includeFile($file);
 			if (is_array($spec)) {
 				_elgg_services()->views->mergeViewsSpec($spec);
 			}
@@ -1740,9 +1785,6 @@ function elgg_views_boot() {
 	elgg_register_css('lightbox', elgg_get_simplecache_url('lightbox/elgg-colorbox-theme/colorbox.css'));
 	elgg_load_css('lightbox');
 
-	// provide warning to use elgg/lightbox AMD
-	elgg_register_js('lightbox', elgg_get_simplecache_url('lightbox.js'));
-
 	// just provides warning to use elgg/autocomplete AMD
 	elgg_register_js('elgg.autocomplete', elgg_normalize_url('js/lib/ui.autocomplete.js'));
 
@@ -1773,7 +1815,7 @@ function elgg_views_boot() {
 	elgg_register_plugin_hook_handler('head', 'page', '_elgg_views_prepare_favicon_links', 1);
 	
 	// @todo the cache is loaded in load_plugins() but we need to know viewtypes earlier
-	$view_path = $GLOBALS['_ELGG']->view_path;
+	$view_path = _elgg_services()->views->view_path;
 	$viewtype_dirs = scandir($view_path);
 	foreach ($viewtype_dirs as $viewtype) {
 		if (_elgg_is_valid_viewtype($viewtype) && is_dir($view_path . $viewtype)) {

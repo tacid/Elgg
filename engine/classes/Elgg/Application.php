@@ -16,6 +16,7 @@ use Elgg\Filesystem\Directory;
  * @since 2.0.0
  *
  * @property-read \Elgg\Menu\Service $menus
+ * @property-read \Elgg\Views\TableColumn\ColumnFactory $table_columns
  */
 class Application {
 
@@ -44,6 +45,7 @@ class Application {
 	private static $public_services = [
 		//'config' => true,
 		'menus' => true,
+		'table_columns' => true,
 	];
 
 	/**
@@ -170,7 +172,6 @@ class Application {
 			'widgets.php',
 
 			// backward compatibility
-			'deprecated-1.9.php',
 			'deprecated-1.10.php',
 			'deprecated-1.11.php',
 			'deprecated-1.12.php',
@@ -235,7 +236,7 @@ class Application {
 
 		$config = $this->services->config;
 
-		if ($config->getVolatile('Elgg\Application_phpunit')) {
+		if (defined('PHPUNIT_ELGG_TESTING_APPLICATION')) {
 			throw new \RuntimeException('Unit tests should not call ' . __METHOD__);
 		}
 
@@ -318,9 +319,6 @@ class Application {
 	 * Get a Database wrapper for performing queries without booting Elgg
 	 *
 	 * If settings.php has not been loaded, it will be loaded to configure the DB connection.
-	 *
-	 * @note Do not type hint on \Elgg\Database, as this will fail in 3.0. If you must type hint,
-	 *       expect an \Elgg\Application\Database.
 	 *
 	 * @note Before boot, the Database instance will not yet be bound to a Logger.
 	 *

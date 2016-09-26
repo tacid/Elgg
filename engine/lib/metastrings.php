@@ -140,12 +140,26 @@ function _elgg_get_metastring_based_objects($options) {
 		'distinct' => true,
 		'preload_owners' => false,
 		'callback' => $callback,
+
+		'batch' => false,
+		'batch_inc_offset' => true,
+		'batch_size' => 25,
 	);
 
 	// @todo Ignore site_guid right now because of #2910
 	$options['site_guid'] = ELGG_ENTITIES_ANY_VALUE;
 
 	$options = array_merge($defaults, $options);
+
+	if ($options['batch'] && !$options['count']) {
+		$batch_size = $options['batch_size'];
+		$batch_inc_offset = $options['batch_inc_offset'];
+
+		// clean batch keys from $options.
+		unset($options['batch'], $options['batch_size'], $options['batch_inc_offset']);
+
+		return new \ElggBatch('_elgg_get_metastring_based_objects', $options, null, $batch_size, $batch_inc_offset);
+	}
 
 	// can't use helper function with type_subtype_pair because
 	// it's already an array...just need to merge it
@@ -329,7 +343,7 @@ function _elgg_get_metastring_based_objects($options) {
 			$offset = sanitise_int($options['offset'], false);
 			$query .= " LIMIT $offset, $limit";
 		}
-
+		
 		$dt = get_data($query, $options['callback']);
 
 		if ($options['preload_owners'] && is_array($dt) && count($dt) > 1) {
@@ -554,7 +568,10 @@ function _elgg_set_metastring_based_object_enabled_by_id($id, $enabled, $type) {
 		if ($object->enabled == $enabled) {
 			$return = false;
 		} elseif ($object->canEdit() && (elgg_trigger_event($event, $type, $object))) {
-			$return = update_data("UPDATE $table SET enabled = '$enabled' where id = $id");
+			$return = update_data("UPDATE $table SET enabled = :enabled where id = :id", [
+				':enabled' => $enabled,
+				':id' => $id,
+			]);
 		}
 	}
 
@@ -644,32 +661,11 @@ function _elgg_delete_metastring_based_object_by_id($id, $type) {
 	$obj = _elgg_get_metastring_based_object_from_id($id, $type);
 
 	if ($obj) {
-		// Tidy up if memcache is enabled.
-		// @todo only metadata is supported
-		if ($type == 'metadata') {
-			static $metabyname_memcache;
-			if ((!$metabyname_memcache) && (is_memcache_available())) {
-				$metabyname_memcache = new \ElggMemcache('metabyname_memcache');
-			}
-
-			if ($metabyname_memcache) {
-				// @todo why name_id? is that even populated?
-				$metabyname_memcache->delete("{$obj->entity_guid}:{$obj->name_id}");
-			}
-		}
-
 		if ($obj->canEdit()) {
-			// bc code for when we triggered 'delete', 'annotations' #4770
-			$result = true;
-			if ($type == "annotation") {
-				$result = elgg_trigger_event('delete', 'annotations', $obj);
-				if ($result === false) {
-					elgg_deprecated_notice("Use the event 'delete', 'annotation'", 1.9);
-				}
-			}
-
-			if (elgg_trigger_event('delete', $type, $obj) && $result) {
-				return (bool)delete_data("DELETE FROM $table WHERE id = $id");
+			if (elgg_trigger_event('delete', $type, $obj)) {
+				return (bool)delete_data("DELETE FROM $table WHERE id = :id", [
+					':id' => $id,
+				]);
 			}
 		}
 	}

@@ -7,15 +7,18 @@
  * @package    Elgg.Core
  * @subpackage DataModel.User
  *
- * @property      string $name          The display name that the user will be known by in the network
- * @property      string $username      The short, reference name for the user in the network
- * @property      string $email         The email address to which Elgg will send email notifications
- * @property      string $language      The language preference of the user (ISO 639-1 formatted)
- * @property      string $banned        'yes' if the user is banned from the network, 'no' otherwise
- * @property      string $admin         'yes' if the user is an administrator of the network, 'no' otherwise
- * @property-read string $password      The legacy (salted MD5) password hash of the user
- * @property-read string $salt          The salt used to create the legacy password hash
- * @property-read string $password_hash The hashed password of the user
+ * @property      string $name             The display name that the user will be known by in the network
+ * @property      string $username         The short, reference name for the user in the network
+ * @property      string $email            The email address to which Elgg will send email notifications
+ * @property      string $language         The language preference of the user (ISO 639-1 formatted)
+ * @property      string $banned           'yes' if the user is banned from the network, 'no' otherwise
+ * @property      string $admin            'yes' if the user is an administrator of the network, 'no' otherwise
+ * @property-read string $password         The legacy (salted MD5) password hash of the user
+ * @property-read string $salt             The salt used to create the legacy password hash
+ * @property-read string $password_hash    The hashed password of the user
+ * @property-read int    $prev_last_action A UNIX timestamp of the previous last action
+ * @property-read int    $last_login       A UNIX timestamp of the last login
+ * @property-read int    $prev_last_login  A UNIX timestamp of the previous login
  */
 class ElggUser extends \ElggEntity
 	implements Friendable {
@@ -68,34 +71,14 @@ class ElggUser extends \ElggEntity
 	 *
 	 * @throws IOException|InvalidParameterException if there was a problem creating the user.
 	 */
-	public function __construct($row = null) {
+	public function __construct(\stdClass $row = null) {
 		$this->initializeAttributes();
 
-		if (!empty($row)) {
-			// Is $row is a DB entity row
-			if ($row instanceof \stdClass) {
-				// Load the rest
-				if (!$this->load($row)) {
-					$msg = "Failed to load new " . get_class() . " for GUID:" . $row->guid;
-					throw new \IOException($msg);
-				}
-			} else if (is_string($row)) {
-				// $row is a username
-				elgg_deprecated_notice('Passing a username to constructor is deprecated. Use get_user_by_username()', 1.9);
-				$user = get_user_by_username($row);
-				if ($user) {
-					foreach ($user->attributes as $key => $value) {
-						$this->attributes[$key] = $value;
-					}
-				}
-			} else if (is_numeric($row)) {
-				// $row is a GUID so load entity
-				elgg_deprecated_notice('Passing a GUID to constructor is deprecated. Use get_entity()', 1.9);
-				if (!$this->load($row)) {
-					throw new \IOException("Failed to load new " . get_class() . " from GUID:" . $row);
-				}
-			} else {
-				throw new \InvalidParameterException("Unrecognized value passed to constuctor.");
+		if ($row) {
+			// Load the rest
+			if (!$this->load($row)) {
+				$msg = "Failed to load new " . get_class() . " for GUID:" . $row->guid;
+				throw new \IOException($msg);
 			}
 		}
 	}
@@ -180,23 +163,6 @@ class ElggUser extends \ElggEntity
 	}
 
 	/**
-	 * User specific override of the entity delete method.
-	 *
-	 * @return bool
-	 */
-	public function delete() {
-		global $USERNAME_TO_GUID_MAP_CACHE;
-
-		// clear cache
-		if (isset($USERNAME_TO_GUID_MAP_CACHE[$this->username])) {
-			unset($USERNAME_TO_GUID_MAP_CACHE[$this->username]);
-		}
-
-		// Delete entity
-		return parent::delete();
-	}
-
-	/**
 	 * {@inheritdoc}
 	 */
 	public function getDisplayName() {
@@ -243,23 +209,12 @@ class ElggUser extends \ElggEntity
 			// setting this not supported
 			case 'password_hash':
 				_elgg_services()->logger->error("password_hash is now an attribute of ElggUser and cannot be set.");
-				return;
 				break;
 
 			default:
 				parent::__set($name, $value);
 				break;
 		}
-	}
-
-	/**
-	 * {@inheritdoc}
-	 */
-	public function set($name, $value) {
-		elgg_deprecated_notice("Use -> instead of set()", 1.9);
-		$this->__set($name, $value);
-
-		return true;
 	}
 
 	/**
@@ -311,6 +266,11 @@ class ElggUser extends \ElggEntity
 	 * @return bool
 	 */
 	public function makeAdmin() {
+		
+		if ($this->isAdmin()) {
+			return true;
+		}
+
 		// If already saved, use the standard function.
 		if ($this->guid && !make_user_admin($this->guid)) {
 			return false;
@@ -328,6 +288,11 @@ class ElggUser extends \ElggEntity
 	 * @return bool
 	 */
 	public function removeAdmin() {
+
+		if (!$this->isAdmin()) {
+			return true;
+		}
+
 		// If already saved, use the standard function.
 		if ($this->guid && !remove_user_admin($this->guid)) {
 			return false;
@@ -424,177 +389,63 @@ class ElggUser extends \ElggEntity
 	}
 
 	/**
-	 * Gets this user's friends
-	 *
-	 * @param array $options Options array. See elgg_get_entities_from_relationship()
-	 *                       for a list of options. 'relationship_guid' is set to
-	 *                       this entity, relationship name to 'friend' and type to 'user'.
-	 * @param int   $limit   The number of users to retrieve (deprecated)
-	 * @param int   $offset  Indexing offset, if any (deprecated)
-	 *
-	 * @return array|false Array of \ElggUser, or false, depending on success
+	 * {@inheritdoc}
 	 */
-	public function getFriends($options = array(), $limit = 10, $offset = 0) {
-		if (is_array($options)) {
-			$options['relationship'] = 'friend';
-			$options['relationship_guid'] = $this->getGUID();
-			$options['type'] = 'user';
-			return elgg_get_entities_from_relationship($options);
-		} else {
-			elgg_deprecated_notice("\ElggUser::getFriends takes an options array", 1.9);
-			return elgg_get_entities_from_relationship(array(
-				'relationship' => 'friend',
-				'relationship_guid' => $this->guid,
-				'type' => 'user',
-				'subtype' => $options,
-				'limit' => $limit,
-				'offset' => $offset,
-			));
-		}
-	}
-
-	/**
-	 * Gets users who have made this user a friend
-	 *
-	 * @param array $options Options array. See elgg_get_entities_from_relationship()
-	 *                       for a list of options. 'relationship_guid' is set to
-	 *                       this entity, relationship name to 'friend', type to 'user'
-	 *                       and inverse_relationship to true.
-	 * @param int   $limit   The number of users to retrieve (deprecated)
-	 * @param int   $offset  Indexing offset, if any (deprecated)
-	 *
-	 * @return array|false Array of \ElggUser, or false, depending on success
-	 */
-	public function getFriendsOf($options = array(), $limit = 10, $offset = 0) {
-		if (is_array($options)) {
-			$options['relationship'] = 'friend';
-			$options['relationship_guid'] = $this->getGUID();
-			$options['inverse_relationship'] = true;
-			$options['type'] = 'user';
-			return elgg_get_entities_from_relationship($options);
-		} else {
-			elgg_deprecated_notice("\ElggUser::getFriendsOf takes an options array", 1.9);
-			return elgg_get_entities_from_relationship(array(
-				'relationship' => 'friend',
-				'relationship_guid' => $this->guid,
-				'type' => 'user',
-				'subtype' => $options,
-				'limit' => $limit,
-				'offset' => $offset,
-			));
-		}
-	}
-
-	/**
-	 * Gets the user's groups
-	 *
-	 * @param array $options Options array. Used to be the subtype string.
-	 * @param int   $limit   The number of groups to retrieve (deprecated)
-	 * @param int   $offset  Indexing offset, if any (deprecated)
-	 *
-	 * @return array|false Array of \ElggGroup, or false, depending on success
-	 */
-	public function getGroups($options = "", $limit = 10, $offset = 0) {
-		if (is_string($options)) {
-			elgg_deprecated_notice('\ElggUser::getGroups() takes an options array', 1.9);
-			$subtype = $options;
-			$options = array(
-				'type' => 'group',
-				'relationship' => 'member',
-				'relationship_guid' => $this->guid,
-				'limit' => $limit,
-				'offset' => $offset,
-			);
-
-			if ($subtype) {
-				$options['subtype'] = $subtype;
-			}
-		} else {
-			$options['type'] = 'group';
-			$options['relationship'] = 'member';
-			$options['relationship_guid'] = $this->guid;
-		}
+	public function getFriends(array $options = []) {
+		$options['relationship'] = 'friend';
+		$options['relationship_guid'] = $this->getGUID();
+		$options['type'] = 'user';
 
 		return elgg_get_entities_from_relationship($options);
 	}
 
 	/**
-	 * Get an array of \ElggObject owned by this user.
-	 *
-	 * @param array $options Options array. See elgg_get_entities() for a list of options.
-	 *                       'type' is set to object and owner_guid to this entity.
-	 * @param int   $limit   Number of results to return (deprecated)
-	 * @param int   $offset  Any indexing offset (deprecated)
-	 *
-	 * @return array|false
+	 * {@inheritdoc}
 	 */
-	public function getObjects($options = array(), $limit = 10, $offset = 0) {
-		if (is_array($options)) {
-			$options['type'] = 'object';
-			$options['owner_guid'] = $this->getGUID();
-			return elgg_get_entities($options);
-		} else {
-			elgg_deprecated_notice("\ElggUser::getObjects takes an options array", 1.9);
-			return elgg_get_entities(array(
-				'type' => 'object',
-				'subtype' => $options,
-				'owner_guid' => $this->getGUID(),
-				'limit' => $limit,
-				'offset' => $offset
-			));
-		}
+	public function getFriendsOf(array $options = []) {
+		$options['relationship'] = 'friend';
+		$options['relationship_guid'] = $this->getGUID();
+		$options['inverse_relationship'] = true;
+		$options['type'] = 'user';
+
+		return elgg_get_entities_from_relationship($options);
 	}
 
 	/**
-	 * Get an array of \ElggObjects owned by this user's friends.
+	 * Gets the user's groups
 	 *
-	 * @param array $options Options array. See elgg_get_entities_from_relationship()
-	 *                       for a list of options. 'relationship_guid' is set to
-	 *                       this entity, type to 'object', relationship name to 'friend'
-	 *                       and relationship_join_on to 'container_guid'.
-	 * @param int   $limit   Number of results to return (deprecated)
-	 * @param int   $offset  Any indexing offset (deprecated)
+	 * @param array $options Options array.
 	 *
-	 * @return array|false
+	 * @return array|false Array of \ElggGroup, or false, depending on success
 	 */
-	public function getFriendsObjects($options = array(), $limit = 10, $offset = 0) {
-		if (is_array($options)) {
-			$options['type'] = 'object';
-			$options['relationship'] = 'friend';
-			$options['relationship_guid'] = $this->getGUID();
-			$options['relationship_join_on'] = 'container_guid';
-			return elgg_get_entities_from_relationship($options);
-		} else {
-			elgg_deprecated_notice("\ElggUser::getFriendsObjects takes an options array", 1.9);
-			return elgg_get_entities_from_relationship(array(
-				'type' => 'object',
-				'subtype' => $options,
-				'limit' => $limit,
-				'offset' => $offset,
-				'relationship' => 'friend',
-				'relationship_guid' => $this->getGUID(),
-				'relationship_join_on' => 'container_guid',
-			));
-		}
+	public function getGroups(array $options = []) {
+		$options['type'] = 'group';
+		$options['relationship'] = 'member';
+		$options['relationship_guid'] = $this->guid;
+
+		return elgg_get_entities_from_relationship($options);
 	}
 
 	/**
-	 * Counts the number of \ElggObjects owned by this user
-	 *
-	 * @param string $subtype The subtypes of the objects, if any
-	 *
-	 * @return int The number of \ElggObjects
-	 * @deprecated 1.9 Use elgg_get_entities()
+	 * {@inheritdoc}
 	 */
-	public function countObjects($subtype = "") {
-		elgg_deprecated_notice("\ElggUser::countObjects() is deprecated. Use elgg_get_entities()", 1.9);
-		$options = [
-			'count' => true,
-		];
-		if ($subtype) {
-			$options['subtype'] = $subtype;
-		}
-		return (int)$this->getObjects($options);
+	public function getObjects(array $options = []) {
+		$options['type'] = 'object';
+		$options['owner_guid'] = $this->getGUID();
+
+		return elgg_get_entities($options);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getFriendsObjects(array $options = []) {
+		$options['type'] = 'object';
+		$options['relationship'] = 'friend';
+		$options['relationship_guid'] = $this->getGUID();
+		$options['relationship_join_on'] = 'container_guid';
+
+		return elgg_get_entities_from_relationship($options);
 	}
 
 	/**
@@ -622,22 +473,6 @@ class ElggUser extends \ElggEntity
 		$object->language = $this->language;
 		unset($object->read_access);
 		return $object;
-	}
-
-	// EXPORTABLE INTERFACE ////////////////////////////////////////////////////////////
-
-	/**
-	 * Return an array of fields which can be exported.
-	 *
-	 * @return array
-	 * @deprecated 1.9 Use toObject()
-	 */
-	public function getExportableValues() {
-		return array_merge(parent::getExportableValues(), array(
-			'name',
-			'username',
-			'language',
-		));
 	}
 
 	/**
@@ -671,5 +506,41 @@ class ElggUser extends \ElggEntity
 		$this->attributes['salt'] = "";
 		$this->attributes['password'] = "";
 		$this->attributes['password_hash'] = _elgg_services()->passwords->generateHash($password);
+	}
+
+	/**
+	 * Enable or disable a notification delivery method
+	 *
+	 * @param string $method  Method name
+	 * @param bool   $enabled Enabled or disabled
+	 * @return bool
+	 */
+	public function setNotificationSetting($method, $enabled = true) {
+		$this->{"notification:method:$method"} = (int) $enabled;
+		return (bool) $this->save();
+	}
+
+	/**
+	 * Returns users's notification settings
+	 * <code>
+	 *    [
+	 *       'email' => true, // enabled
+	 *       'ajax' => false, // disabled
+	 *    ]
+	 * </code>
+	 * 
+	 * @return array
+	 */
+	public function getNotificationSettings() {
+
+		$settings = [];
+
+		$methods = _elgg_services()->notifications->getMethods();
+		foreach ($methods as $method) {
+			$settings[$method] = (bool) $this->{"notification:method:$method"};
+		}
+
+		return $settings;
+	
 	}
 }

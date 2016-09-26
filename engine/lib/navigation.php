@@ -440,10 +440,10 @@ function _elgg_river_menu_setup($hook, $type, $return, $params) {
 			}
 		}
 		
-		if (elgg_is_admin_logged_in()) {
+		if ($item->canDelete()) {
 			$options = array(
 				'name' => 'delete',
-				'href' => elgg_add_action_tokens_to_url("action/river/delete?id=$item->id"),
+				'href' => elgg_add_action_tokens_to_url("action/river/delete?id={$item->id}"),
 				'text' => elgg_view_icon('delete'),
 				'title' => elgg_echo('river:delete'),
 				'confirm' => elgg_echo('deleteconfirm'),
@@ -574,7 +574,7 @@ function _elgg_login_menu_setup($hook, $type, $return, $params) {
 	if (elgg_get_config('allow_registration')) {
 		$return[] = \ElggMenuItem::factory(array(
 			'name' => 'register',
-			'href' => 'register',
+			'href' => elgg_get_registration_url(),
 			'text' => elgg_echo('register'),
 			'link_class' => 'registration_link',
 		));

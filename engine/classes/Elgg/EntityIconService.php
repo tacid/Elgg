@@ -202,7 +202,7 @@ class EntityIconService {
 			return false;
 		}
 
-		$cropping_mode = $x1 || $y1 || $x2 || $y2;
+		$cropping_mode = ($x2 > $x1) && ($y2 > $y1);
 		if (!$cropping_mode) {
 			$this->deleteIcon($entity, $type);
 		}
@@ -254,11 +254,12 @@ class EntityIconService {
 			$square = (bool) elgg_extract('square', $opts);
 			$upscale = (bool) elgg_extract('upscale', $opts);
 
-			if ($type === 'icon' && $cropping_mode && $square === false && $size !== 'large') {
-				// In cropping mode, we want to preserve non-square images the way they are.
-				// For BC, we need to crop the large icon into a square if cropping coordinates are provided.
-				// There is a problem with cropping large icons however. See #9663 and EntityIconServiceTest::testIconDimensionsAfterResize
-				continue;
+			if ($type === 'icon' && $cropping_mode) {
+				// Do not crop out non-square icons if cropping coordinates are a square
+				$cropping_ratio = ($x2 - $x1) / ($y2 - $y1);
+				if ($cropping_ratio == 1 && $square === false) {
+					continue;
+				}
 			}
 
 			$icon = $this->getIcon($entity, $size, $type);
@@ -425,6 +426,7 @@ class EntityIconService {
 	 * @param string $entity_subtype Entity subtype
 	 * @param string $type           The name of the icon. e.g., 'icon', 'cover_photo'
 	 * @return array
+	 * @throws InvalidParameterException
 	 */
 	public function getSizes($entity_type = null, $entity_subtype = null, $type = 'icon') {
 		$sizes = [];

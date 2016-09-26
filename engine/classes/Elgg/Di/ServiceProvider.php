@@ -37,6 +37,8 @@ use Zend\Mail\Transport\TransportInterface as Mailer;
  * @property-read \Elgg\EventsService                      $events
  * @property-read \Elgg\Assets\ExternalFiles               $externalFiles
  * @property-read \ElggFileCache                           $fileCache
+ * @property-read \ElggDiskFilestore                       $filestore
+ * @property-read \Elgg\FormsService                       $forms
  * @property-read \Elgg\PluginHooksService                 $hooks
  * @property-read \Elgg\EntityIconService                  $iconService
  * @property-read \Elgg\Http\Input                         $input
@@ -44,10 +46,12 @@ use Zend\Mail\Transport\TransportInterface as Mailer;
  * @property-read Mailer                                   $mailer
  * @property-read \Elgg\Menu\Service                       $menus
  * @property-read \Elgg\Cache\MetadataCache                $metadataCache
+ * @property-read \Stash\Pool|null                         $memcacheStashPool
  * @property-read \Elgg\Database\MetadataTable             $metadataTable
  * @property-read \Elgg\Database\MetastringsTable          $metastringsTable
  * @property-read \Elgg\Database\Mutex                     $mutex
  * @property-read \Elgg\Notifications\NotificationsService $notifications
+ * @property-read \Elgg\Cache\NullCache                    $nullCache
  * @property-read \Elgg\PasswordService                    $passwords
  * @property-read \Elgg\PersistentLoginService             $persistentLogin
  * @property-read \Elgg\Database\Plugins                   $plugins
@@ -56,19 +60,23 @@ use Zend\Mail\Transport\TransportInterface as Mailer;
  * @property-read \Elgg\Application\Database               $publicDb
  * @property-read \Elgg\Database\QueryCounter              $queryCounter
  * @property-read \Elgg\Http\Request                       $request
+ * @property-read \Elgg\Http\ResponseFactory               $responseFactory
  * @property-read \Elgg\Database\RelationshipsTable        $relationshipsTable
  * @property-read \Elgg\Router                             $router
  * @property-read \Elgg\Application\ServeFileHandler       $serveFileHandler
  * @property-read \ElggSession                             $session
+ * @property-read \Elgg\Security\UrlSigner                 $urlSigner
  * @property-read \Elgg\Cache\SimpleCache                  $simpleCache
  * @property-read \Elgg\Database\SiteSecret                $siteSecret
  * @property-read \Elgg\Forms\StickyForms                  $stickyForms
  * @property-read \Elgg\Database\SubtypeTable              $subtypeTable
  * @property-read \Elgg\Cache\SystemCache                  $systemCache
  * @property-read \Elgg\SystemMessagesService              $systemMessages
+ * @property-read \Elgg\Views\TableColumn\ColumnFactory    $table_columns
  * @property-read \Elgg\Timer                              $timer
  * @property-read \Elgg\I18n\Translator                    $translator
  * @property-read \Elgg\UpgradeService                     $upgrades
+ * @property-read \Elgg\UploadService                      $uploads
  * @property-read \Elgg\UserCapabilities                   $userCapabilities
  * @property-read \Elgg\Database\UsersTable                $usersTable
  * @property-read \Elgg\ViewsService                       $views
@@ -106,10 +114,13 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 		});
 
 		$this->setFactory('accessCollections', function(ServiceProvider $c) {
-			return new \Elgg\Database\AccessCollections($c->config->get('site_guid'));
+			return new \Elgg\Database\AccessCollections(
+					$c->config, $c->db, $c->entityTable, $c->accessCache, $c->hooks, $c->session, $c->translator);
 		});
 
-		$this->setClassName('actions', \Elgg\ActionsService::class);
+		$this->setFactory('actions', function(ServiceProvider $c) {
+			return new \Elgg\ActionsService($c->config, $c->session, $c->crypto);
+		});
 
 		$this->setClassName('adminNotices', \Elgg\Database\AdminNotices::class);
 
@@ -123,7 +134,9 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			return $obj;
 		});
 
-		$this->setClassName('annotations', \Elgg\Database\Annotations::class);
+		$this->setFactory('annotations', function(ServiceProvider $c) {
+			return new \Elgg\Database\Annotations($c->db, $c->session, $c->events);
+		});
 
 		$this->setClassName('autoP', \ElggAutoP::class);
 
@@ -148,7 +161,7 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 		$this->setFactory('datalist', function(ServiceProvider $c) {
 			// TODO(ewinslow): Add back memcached support
 			$db = $c->db;
-			$dbprefix = $db->getTablePrefix();
+			$dbprefix = $db->prefix;
 			$pool = new Pool\InMemory();
 			return new \Elgg\Database\Datalist($pool, $db, $c->logger, "{$dbprefix}datalists");
 		});
@@ -180,7 +193,19 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			return new \Elgg\EntityPreloader($c->entityCache, $c->entityTable);
 		});
 
-		$this->setClassName('entityTable', \Elgg\Database\EntityTable::class);
+		$this->setFactory('entityTable', function(ServiceProvider $c) {
+			return new \Elgg\Database\EntityTable(
+				$c->config,
+				$c->db,
+				$c->entityCache,
+				$c->metadataCache,
+				$c->subtypeTable,
+				$c->events,
+				$c->session,
+				$c->translator,
+				$c->logger
+			);
+		});
 
 		$this->setFactory('events', function(ServiceProvider $c) {
 			return $this->resolveLoggerDependencies('events');
@@ -192,6 +217,14 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 
 		$this->setFactory('fileCache', function(ServiceProvider $c) {
 			return new \ElggFileCache($c->config->getCachePath() . 'system_cache/');
+		});
+
+		$this->setFactory('filestore', function(ServiceProvider $c) {
+			return new \ElggDiskFilestore($c->config->getDataPath());
+		});
+
+		$this->setFactory('forms', function(ServiceProvider $c) {
+			return new \Elgg\FormsService($c->views, $c->logger);
 		});
 
 		$this->setFactory('hooks', function(ServiceProvider $c) {
@@ -219,6 +252,21 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			return new \Elgg\Cache\MetadataCache($c->session);
 		});
 
+		$this->setFactory('memcacheStashPool', function(ServiceProvider $c) {
+			if (!$c->config->getVolatile('memcache')) {
+				return null;
+			}
+
+			$servers = $c->config->getVolatile('memcache_servers');
+			if (!$servers) {
+				return null;
+			}
+			$driver = new \Stash\Driver\Memcache([
+				'servers' => $servers,
+			]);
+			return new \Stash\Pool($driver);
+		});
+
 		$this->setFactory('metadataTable', function(ServiceProvider $c) {
 			// TODO(ewinslow): Use Pool instead of MetadataCache for caching
 			return new \Elgg\Database\MetadataTable(
@@ -243,8 +291,10 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			$queue_name = \Elgg\Notifications\NotificationsService::QUEUE_NAME;
 			$queue = new \Elgg\Queue\DatabaseQueue($queue_name, $c->db);
 			$sub = new \Elgg\Notifications\SubscriptionsService($c->db);
-			return new \Elgg\Notifications\NotificationsService($sub, $queue, $c->hooks, $c->session, $c->translator, $c->entityTable);
+			return new \Elgg\Notifications\NotificationsService($sub, $queue, $c->hooks, $c->session, $c->translator, $c->entityTable, $c->logger);
 		});
+
+		$this->setClassName('nullCache', \Elgg\Cache\NullCache::class);
 
 		$this->setFactory('persistentLogin', function(ServiceProvider $c) {
 			$global_cookies_config = $c->config->getCookieConfig();
@@ -286,6 +336,15 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 
 		$this->setFactory('request', [\Elgg\Http\Request::class, 'createFromGlobals']);
 
+		$this->setFactory('responseFactory', function(ServiceProvider $c) {
+			if (PHP_SAPI === 'cli') {
+				$transport = new \Elgg\Http\OutputBufferTransport();
+			} else {
+				$transport = new \Elgg\Http\HttpProtocolTransport();
+			}
+			return new \Elgg\Http\ResponseFactory($c->request, $c->hooks, $c->ajax, $transport);
+		});
+
 		$this->setFactory('router', function(ServiceProvider $c) {
 			// TODO(evan): Init routes from plugins or cache
 			$router = new \Elgg\Router($c->hooks);
@@ -320,6 +379,8 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			return new \ElggSession($session);
 		});
 
+		$this->setClassName('urlSigner', \Elgg\Security\UrlSigner::class);
+
 		$this->setFactory('simpleCache', function(ServiceProvider $c) {
 			return new \Elgg\Cache\SimpleCache($c->config, $c->datalist, $c->views);
 		});
@@ -346,9 +407,15 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			return new \Elgg\SystemMessagesService($c->session);
 		});
 
+		$this->setClassName('table_columns', \Elgg\Views\TableColumn\ColumnFactory::class);
+
 		$this->setClassName('timer', \Elgg\Timer::class);
 
 		$this->setClassName('translator', \Elgg\I18n\Translator::class);
+
+		$this->setFactory('uploads', function(ServiceProvider $c) {
+			return new \Elgg\UploadService($c->request);
+		});
 
 		$this->setFactory('upgrades', function(ServiceProvider $c) {
 			return new \Elgg\UpgradeService(
@@ -365,7 +432,15 @@ class ServiceProvider extends \Elgg\Di\DiContainer {
 			return new \Elgg\UserCapabilities($c->hooks, $c->entityTable, $c->session);
 		});
 
-		$this->setClassName('usersTable', \Elgg\Database\UsersTable::class);
+		$this->setFactory('usersTable', function(ServiceProvider $c) {
+			return new \Elgg\Database\UsersTable(
+				$c->config,
+				$c->db,
+				$c->entityTable,
+				$c->entityCache,
+				$c->events
+			);
+		});
 
 		$this->setFactory('views', function(ServiceProvider $c) {
 			return new \Elgg\ViewsService($c->hooks, $c->logger);

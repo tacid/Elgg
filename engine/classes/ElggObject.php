@@ -64,25 +64,14 @@ class ElggObject extends \ElggEntity {
 	 * @throws IOException If cannot load remaining data from db
 	 * @throws InvalidParameterException If not passed a db row result
 	 */
-	public function __construct($row = null) {
+	public function __construct(\stdClass $row = null) {
 		$this->initializeAttributes();
 
-		if (!empty($row)) {
-			// Is $row is a DB row from the entity table
-			if ($row instanceof \stdClass) {
-				// Load the rest
-				if (!$this->load($row)) {
-					$msg = "Failed to load new " . get_class($this) . " for GUID: " . $row->guid;
-					throw new \IOException($msg);
-				}
-			} else if (is_numeric($row)) {
-				// $row is a GUID so load
-				elgg_deprecated_notice('Passing a GUID to constructor is deprecated. Use get_entity()', 1.9);
-				if (!$this->load($row)) {
-					throw new \IOException("Failed to load new " . get_class($this) . " from GUID:" . $row);
-				}
-			} else {
-				throw new \InvalidParameterException("Unrecognized value passed to constuctor.");
+		if ($row) {
+			// Load the rest
+			if (!$this->load($row)) {
+				$msg = "Failed to load new " . get_class($this) . " for GUID: " . $row->guid;
+				throw new \IOException($msg);
 			}
 		}
 	}
@@ -116,7 +105,6 @@ class ElggObject extends \ElggEntity {
 	 * {@inheritdoc}
 	 */
 	protected function create() {
-		global $CONFIG;
 
 		$guid = parent::create();
 		if (!$guid) {
@@ -124,13 +112,21 @@ class ElggObject extends \ElggEntity {
 			// Is returning false the correct thing to do
 			return false;
 		}
-		$title = sanitize_string($this->title);
-		$description = sanitize_string($this->description);
-		
-		$query = "INSERT into {$CONFIG->dbprefix}objects_entity
-			(guid, title, description) values ($guid, '$title', '$description')";
 
-		$result = $this->getDatabase()->insertData($query);
+		$dbprefix = elgg_get_config('dbprefix');
+		$query = "INSERT INTO {$dbprefix}objects_entity
+			(guid, title, description)
+			VALUES
+			(:guid, :title, :description)";
+
+		$params = [
+			':guid' => (int) $guid,
+			':title' => (string) $this->title,
+			':description' => (string) $this->description,
+		];
+
+		$result = $this->getDatabase()->insertData($query, $params);
+
 		if ($result === false) {
 			// TODO(evan): Throw an exception here?
 			return false;
@@ -143,24 +139,27 @@ class ElggObject extends \ElggEntity {
 	 * {@inheritdoc}
 	 */
 	protected function update() {
-		global $CONFIG;
 
 		if (!parent::update()) {
 			return false;
 		}
-		
-		$guid = (int)$this->guid;
-		$title = sanitize_string($this->title);
-		$description = sanitize_string($this->description);
+
+		$dbprefix = elgg_get_config('dbprefix');
 
 		$query = "
-			UPDATE {$CONFIG->dbprefix}objects_entity
-			SET title = '$title',
-				description = '$description'
-			WHERE guid = $guid
+			UPDATE {$dbprefix}objects_entity
+			SET title = :title,
+				description = :description
+			WHERE guid = :guid
 		";
 
-		return $this->getDatabase()->updateData($query) !== false;
+		$params = [
+			':guid' => $this->guid,
+			':title' => (string) $this->title,
+			':description' => (string) $this->description,
+		];
+
+		return $this->getDatabase()->updateData($query, false, $params) !== false;
 	}
 
 	/**
@@ -186,23 +185,6 @@ class ElggObject extends \ElggEntity {
 		$object->description = $this->description;
 		$object->tags = $this->tags ? $this->tags : array();
 		return $object;
-	}
-
-	/*
-	 * EXPORTABLE INTERFACE
-	 */
-
-	/**
-	 * Return an array of fields which can be exported.
-	 *
-	 * @return array
-	 * @deprecated 1.9 Use toObject()
-	 */
-	public function getExportableValues() {
-		return array_merge(parent::getExportableValues(), array(
-			'title',
-			'description',
-		));
 	}
 
 	/**

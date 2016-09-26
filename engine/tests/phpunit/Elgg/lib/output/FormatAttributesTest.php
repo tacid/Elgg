@@ -5,7 +5,7 @@ namespace Elgg\lib\output;
 /**
  * @group Output
  */
-class FormatAttributesTest extends \PHPUnit_Framework_TestCase {
+class FormatAttributesTest extends \Elgg\TestCase {
 
 	public function testGeneralUsage() {
 		$attrs = [

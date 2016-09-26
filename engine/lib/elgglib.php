@@ -1,6 +1,7 @@
 <?php
 
 use Elgg\Filesystem\Directory;
+use Elgg\Http\ResponseBuilder;
 
 /**
  * Bootstrapping and helper procedural code available for use in Elgg core and plugins.
@@ -91,25 +92,36 @@ function elgg_load_library($name) {
  * @throws SecurityException
  */
 function forward($location = "", $reason = 'system') {
-	if (!headers_sent($file, $line)) {
-		if ($location === REFERER) {
-			$location = _elgg_services()->request->headers->get('Referer');
-		}
-
-		$location = elgg_normalize_url($location);
-
-		// return new forward location or false to stop the forward or empty string to exit
-		$current_page = current_page_url();
-		$params = array('current_url' => $current_page, 'forward_url' => $location);
-		$location = elgg_trigger_plugin_hook('forward', $reason, $params, $location);
-
-		if ($location) {
-			header("Location: {$location}");
-		}
-		exit;
-	} else {
+	if (headers_sent($file, $line)) {
 		throw new \SecurityException("Redirect could not be issued due to headers already being sent. Halting execution for security. "
 			. "Output started in file $file at line $line. Search http://learn.elgg.org/ for more information.");
+	}
+
+	_elgg_services()->responseFactory->redirect($location, $reason);
+	exit;
+}
+
+/**
+ * Set a response HTTP header
+ *
+ * @see header
+ *
+ * @param string $header  Header
+ * @param bool   $replace Replace existing header
+ * @return void
+ * @since 2.3
+ */
+function elgg_set_http_header($header, $replace = true) {
+	if (headers_sent($file, $line)) {
+		_elgg_services()->logger->error("Cannot modify header information - headers already sent by
+			(output started at $file:$line)");
+	} else {
+		header($header, $replace);
+	}
+
+	if (!preg_match('~^HTTP/\\d\\.\\d~', $header)) {
+		list($name, $value) = explode(':', $header, 2);
+		_elgg_services()->responseFactory->setHeader($name, ltrim($value), $replace);
 	}
 }
 
@@ -554,6 +566,19 @@ function elgg_unregister_event_handler($event, $object_type, $callback) {
 }
 
 /**
+ * Clears all callback registrations for a event.
+ *
+ * @param string $event       The name of the event
+ * @param string $object_type The objecttype of the event
+ *
+ * @return void
+ * @since 2.3
+ */
+function elgg_clear_event_handlers($event, $object_type) {
+	_elgg_services()->events->clearHandlers($event, $object_type);
+}
+
+/**
  * Trigger an Elgg Event and attempt to run all handler callbacks registered to that
  * event, type.
  *
@@ -868,7 +893,10 @@ function _elgg_php_exception_handler($exception) {
 		// value should be a system path to a file to include
 		if (!empty($CONFIG->exception_include) && is_file($CONFIG->exception_include)) {
 			ob_start();
+
+			// don't isolate, these scripts may use the local $exception var.
 			include $CONFIG->exception_include;
+
 			$exception_output = ob_get_clean();
 			
 			// if content is returned from the custom handler we will output
@@ -1002,12 +1030,11 @@ function elgg_log($message, $level = 'NOTICE') {
 		'INFO' => 200,
 		'NOTICE' => 250,
 		'WARNING' => 300,
-		'DEBUG' => 300,
 		'ERROR' => 400,
 	);
 
-	if ($level == 'DEBUG') {
-		elgg_deprecated_notice("The 'DEBUG' level for logging has been deprecated.", 1.9);
+	if (!isset($levels[$level])) {
+		throw new \InvalidArgumentException("Invalid \$level value");
 	}
 
 	$level = $levels[$level];
@@ -1293,21 +1320,58 @@ function elgg_http_url_is_identical($url1, $url2, $ignore_params = array('offset
 }
 
 /**
+ * Signs provided URL with a SHA256 HMAC key
+ *
+ * @note Signed URLs do not offer CSRF protection and should not be used instead of action tokens.
+ *
+ * @param string $url     URL to sign
+ * @param string $expires Expiration time
+ *                        A string suitable for strtotime()
+ *                        Falsey values indicate non-expiring URL
+ * @return string
+ */
+function elgg_http_get_signed_url($url, $expires = false) {
+	return _elgg_services()->urlSigner->sign($url, $expires);
+}
+
+/**
+ * Validates if the HMAC signature of the URL is valid
+ *
+ * @param string $url URL to validate
+ * @return bool
+ */
+function elgg_http_validate_signed_url($url) {
+	return _elgg_services()->urlSigner->isValid($url);
+}
+
+/**
+ * Validates if the HMAC signature of the current request is valid
+ * Issues 403 response if signature is inalid
+ * @return void
+ */
+function elgg_signed_request_gatekeeper() {
+	if (!elgg_http_validate_signed_url(current_page_url())) {
+		register_error(elgg_echo('invalid_request_signature'));
+		forward('', '403');
+	}
+}
+
+/**
  * Checks for $array[$key] and returns its value if it exists, else
  * returns $default.
  *
  * Shorthand for $value = (isset($array['key'])) ? $array['key'] : 'default';
  *
- * @param string $key     The key to check.
- * @param array  $array   The array to check against.
- * @param mixed  $default Default value to return if nothing is found.
+ * @param string $key     Key to check in the source array
+ * @param array  $array   Source array
+ * @param mixed  $default Value to return if key is not found
  * @param bool   $strict  Return array key if it's set, even if empty. If false,
  *                        return $default if the array key is unset or empty.
  *
  * @return mixed
  * @since 1.8.0
  */
-function elgg_extract($key, array $array, $default = null, $strict = true) {
+function elgg_extract($key, $array, $default = null, $strict = true) {
 	if (!is_array($array)) {
 		return $default;
 	}
@@ -1317,6 +1381,25 @@ function elgg_extract($key, array $array, $default = null, $strict = true) {
 	} else {
 		return (isset($array[$key]) && !empty($array[$key])) ? $array[$key] : $default;
 	}
+}
+
+/**
+ * Extract class names from an array with key "class", optionally merging into a preexisting set.
+ *
+ * @param array           $array    Source array
+ * @param string|string[] $existing Existing name(s)
+ * @return string[]
+ *
+ * @since 2.3.0
+ */
+function elgg_extract_class(array $array, $existing = []) {
+	$existing = empty($existing) ? [] : (array) $existing;
+
+	$merge = (array) elgg_extract('class', $array, []);
+
+	array_splice($existing, count($existing), 0, $merge);
+
+	return array_values(array_unique($existing));
 }
 
 /**
@@ -1498,29 +1581,13 @@ function _elgg_shutdown_hook() {
 }
 
 /**
- * Serve javascript pages.
- *
- * Searches for views under js/ and outputs them with special
- * headers for caching control.
- *
- * @param array $page The page array
- *
- * @return bool
- * @elgg_pagehandler js
- * @access private
- */
-function _elgg_js_page_handler($page) {
-	return _elgg_cacheable_view_page_handler($page, 'js');
-}
-
-/**
  * Serve individual views for Ajax.
  *
  * /ajax/view/<view_name>?<key/value params>
  * /ajax/form/<action_name>?<key/value params>
  *
  * @param string[] $segments URL segments (not including "ajax")
- * @return bool
+ * @return ResponseBuilder
  *
  * @see elgg_register_ajax_view()
  * @elgg_pagehandler ajax
@@ -1542,19 +1609,12 @@ function _elgg_ajax_page_handler($segments) {
 			$view = 'forms/' . implode('/', array_slice($segments, 1));
 		}
 
-		$allowed_views = $GLOBALS['_ELGG']->allowed_ajax_views;
 		$ajax_api = _elgg_services()->ajax;
-
+		$allowed_views = $ajax_api->getViews();
+		
 		// cacheable views are always allowed
-		if (!array_key_exists($view, $allowed_views) && !_elgg_services()->views->isCacheableView($view)) {
-			if ($ajax_api->isReady()) {
-				$ajax_api->respondWithError("Ajax view '$view' was not registered");
-				return true;
-			}
-
-			// legacy XHR behavior
-			header('HTTP/1.1 403 Forbidden');
-			exit;
+		if (!in_array($view, $allowed_views) && !_elgg_services()->views->isCacheableView($view)) {
+			return elgg_error_response("Ajax view '$view' was not registered", REFERRER, ELGG_HTTP_FORBIDDEN);
 		}
 
 		// pull out GET parameters through filter
@@ -1570,57 +1630,35 @@ function _elgg_ajax_page_handler($segments) {
 		$content_type = '';
 		if ($segments[0] === 'view') {
 			$output = elgg_view($view, $vars);
-			$ajax_hook_type = "view:$view";
 
 			// Try to guess the mime-type
 			switch ($segments[1]) {
 				case "js":
-					$content_type = 'text/javascript';
+					$content_type = 'text/javascript;charset=utf-8';
 					break;
 				case "css":
-					$content_type = 'text/css';
+					$content_type = 'text/css;charset=utf-8';
+					break;
+				default :
+					if (_elgg_services()->views->isCacheableView($view)) {
+						$file = _elgg_services()->views->findViewFile($view, elgg_get_viewtype());
+						$content_type = (new \Elgg\Filesystem\MimeTypeDetector())->getType($file, 'text/html');
+					}
 					break;
 			}
 		} else {
 			$action = implode('/', array_slice($segments, 1));
 			$output = elgg_view_form($action, array(), $vars);
-			$ajax_hook_type = "form:$action";
 		}
 
-		if ($ajax_api->isReady()) {
-			$ajax_api->respondFromOutput($output, $ajax_hook_type);
-			return true;
-		}
-
-		// legacy XHR behavior
 		if ($content_type) {
-			header("Content-Type: $content_type;charset=utf-8");
+			elgg_set_http_header("Content-Type: $content_type");
 		}
-		echo $output;
-		return true;
+		
+		return elgg_ok_response($output);
 	}
 
 	return false;
-}
-
-/**
- * Serve CSS
- *
- * Serves CSS from the css views directory with headers for caching control
- *
- * @param array $page The page array
- *
- * @return bool
- * @elgg_pagehandler css
- * @access private
- */
-function _elgg_css_page_handler($page) {
-	if (!isset($page[0])) {
-		// default css
-		$page[0] = 'elgg';
-	}
-	
-	return _elgg_cacheable_view_page_handler($page, 'css');
 }
 
 /**
@@ -1643,70 +1681,6 @@ function _elgg_favicon_page_handler($segments) {
 	//echo elgg_view('favicon.ico');
 
 	return true;
-}
-
-/**
- * Serves a JS or CSS view with headers for caching.
- *
- * /<css||js>/name/of/view.<last_cache>.<css||js>
- *
- * @param array  $page The page array
- * @param string $type The type: js or css
- *
- * @return bool
- * @access private
- * @deprecated 2.1 Use elgg_get_simplecache_url()
- */
-function _elgg_cacheable_view_page_handler($page, $type) {
-
-	switch ($type) {
-		case 'js':
-			$content_type = 'text/javascript';
-			break;
-
-		case 'css':
-			$content_type = 'text/css';
-			break;
-
-		default:
-			return false;
-			break;
-	}
-
-	if ($page) {
-		// the view file names can have multiple dots
-		// eg: views/default/js/calendars/jquery.fullcalendar.min.php
-		// translates to the url /js/<ts>/calendars/jquery.fullcalendar.min.js
-		// and the view js/calendars/jquery.fullcalendar.min
-		// we ignore the last two dots for the ts and the ext.
-		// Additionally, the timestamp is optional.
-		$page = implode('/', $page);
-		$regex = '|(.+?)\.\w+$|';
-		if (!preg_match($regex, $page, $matches)) {
-			return false;
-		}
-		$view = "$type/{$matches[1]}";
-		if (!elgg_view_exists($view)) {
-			return false;
-		}
-
-		$msg = 'URLs starting with /js/ and /css/ are deprecated. Use elgg_get_simplecache_url().';
-		elgg_deprecated_notice($msg, '2.1');
-
-		$return = elgg_view($view);
-
-		header("Content-type: $content_type;charset=utf-8");
-
-		// @todo should js be cached when simple cache turned off
-		//header('Expires: ' . gmdate('D, d M Y H:i:s \G\M\T', strtotime("+10 days")), true);
-		//header("Pragma: public");
-		//header("Cache-Control: public");
-		//header("Content-Length: " . strlen($return));
-
-		echo $return;
-		return true;
-	}
-	return false;
 }
 
 /**
@@ -1838,12 +1812,11 @@ function _elgg_is_valid_options_for_batch_operation($options, $type) {
 /**
  * Intercepts the index page when Walled Garden mode is enabled.
  *
- * @return bool
+ * @return ResponseBuilder
  * @access private
  */
 function _elgg_walled_garden_index() {
-	echo elgg_view_resource('walled_garden');
-	return true;
+	return elgg_ok_response(elgg_view_resource('walled_garden'));
 }
 
 
@@ -1885,6 +1858,9 @@ function _elgg_walled_garden_init() {
 	global $CONFIG;
 
 	elgg_register_css('elgg.walled_garden', elgg_get_simplecache_url('walled_garden.css'));
+
+	// Deprecated, but registered for BC
+	// @todo: remove in 3.x
 	elgg_register_js('elgg.walled_garden', elgg_get_simplecache_url('walled_garden.js'));
 
 	elgg_register_page_handler('walled_garden', '_elgg_walled_garden_ajax_handler');
@@ -1893,6 +1869,10 @@ function _elgg_walled_garden_init() {
 	if (isset($CONFIG->site) && $CONFIG->site instanceof \ElggSite) {
 		$CONFIG->site->checkWalledGarden();
 	}
+
+	// For BC, we are extending the views to make sure that sites that customized walled garden get the updates
+	// @todo: in 3.0, move this into the layout view
+	elgg_extend_view('page/layouts/walled_garden', 'page/layouts/walled_garden/cancel_button');
 }
 
 /**
@@ -1925,8 +1905,6 @@ function _elgg_init() {
 	elgg_register_action('comment/save');
 	elgg_register_action('comment/delete');
 
-	elgg_register_page_handler('js', '_elgg_js_page_handler');
-	elgg_register_page_handler('css', '_elgg_css_page_handler');
 	elgg_register_page_handler('ajax', '_elgg_ajax_page_handler');
 	elgg_register_page_handler('favicon.ico', '_elgg_favicon_page_handler');
 
@@ -2027,6 +2005,75 @@ define('REFERRER', -1);
  * @var int -1
  */
 define('REFERER', -1);
+
+/**
+ * HTTP Response codes
+ */
+define('ELGG_HTTP_CONTINUE', 100);
+define('ELGG_HTTP_SWITCHING_PROTOCOLS', 101);
+define('ELGG_HTTP_PROCESSING', 102);// RFC2518
+define('ELGG_HTTP_OK', 200);
+define('ELGG_HTTP_CREATED', 201);
+define('ELGG_HTTP_ACCEPTED', 202);
+define('ELGG_HTTP_NON_AUTHORITATIVE_INFORMATION', 203);
+define('ELGG_HTTP_NO_CONTENT', 204);
+define('ELGG_HTTP_RESET_CONTENT', 205);
+define('ELGG_HTTP_PARTIAL_CONTENT', 206);
+define('ELGG_HTTP_MULTI_STATUS', 207); // RFC4918
+define('ELGG_HTTP_ALREADY_REPORTED', 208); // RFC5842
+define('ELGG_HTTP_IM_USED', 226); // RFC3229
+define('ELGG_HTTP_MULTIPLE_CHOICES', 300);
+define('ELGG_HTTP_MOVED_PERMANENTLY', 301);
+define('ELGG_HTTP_FOUND', 302);
+define('ELGG_HTTP_SEE_OTHER', 303);
+define('ELGG_HTTP_NOT_MODIFIED', 304);
+define('ELGG_HTTP_USE_PROXY', 305);
+define('ELGG_HTTP_RESERVED', 306);
+define('ELGG_HTTP_TEMPORARY_REDIRECT', 307);
+define('ELGG_HTTP_PERMANENTLY_REDIRECT', 308); // RFC7238
+define('ELGG_HTTP_BAD_REQUEST', 400);
+define('ELGG_HTTP_UNAUTHORIZED', 401);
+define('ELGG_HTTP_PAYMENT_REQUIRED', 402);
+define('ELGG_HTTP_FORBIDDEN', 403);
+define('ELGG_HTTP_NOT_FOUND', 404);
+define('ELGG_HTTP_METHOD_NOT_ALLOWED', 405);
+define('ELGG_HTTP_NOT_ACCEPTABLE', 406);
+define('ELGG_HTTP_PROXY_AUTHENTICATION_REQUIRED', 407);
+define('ELGG_HTTP_REQUEST_TIMEOUT', 408);
+define('ELGG_HTTP_CONFLICT', 409);
+define('ELGG_HTTP_GONE', 410);
+define('ELGG_HTTP_LENGTH_REQUIRED', 411);
+define('ELGG_HTTP_PRECONDITION_FAILED', 412);
+define('ELGG_HTTP_REQUEST_ENTITY_TOO_LARGE', 413);
+define('ELGG_HTTP_REQUEST_URI_TOO_LONG', 414);
+define('ELGG_HTTP_UNSUPPORTED_MEDIA_TYPE', 415);
+define('ELGG_HTTP_REQUESTED_RANGE_NOT_SATISFIABLE', 416);
+define('ELGG_HTTP_EXPECTATION_FAILED', 417);
+define('ELGG_HTTP_I_AM_A_TEAPOT', 418); // RFC2324
+define('ELGG_HTTP_UNPROCESSABLE_ENTITY', 422);// RFC4918
+define('ELGG_HTTP_LOCKED', 423); // RFC4918
+define('ELGG_HTTP_FAILED_DEPENDENCY', 424); // RFC4918
+define('ELGG_HTTP_RESERVED_FOR_WEBDAV_ADVANCED_COLLECTIONS_EXPIRED_PROPOSAL', 425); // RFC2817
+define('ELGG_HTTP_UPGRADE_REQUIRED', 426);// RFC2817
+define('ELGG_HTTP_PRECONDITION_REQUIRED', 428); // RFC6585
+define('ELGG_HTTP_TOO_MANY_REQUESTS', 429); // RFC6585
+define('ELGG_HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE', 431); // RFC6585
+define('ELGG_HTTP_INTERNAL_SERVER_ERROR', 500);
+define('ELGG_HTTP_NOT_IMPLEMENTED', 501);
+define('ELGG_HTTP_BAD_GATEWAY', 502);
+define('ELGG_HTTP_SERVICE_UNAVAILABLE', 503);
+define('ELGG_HTTP_GATEWAY_TIMEOUT', 504);
+define('ELGG_HTTP_VERSION_NOT_SUPPORTED', 505);
+define('ELGG_HTTP_VARIANT_ALSO_NEGOTIATES_EXPERIMENTAL', 506);// RFC2295
+define('ELGG_HTTP_INSUFFICIENT_STORAGE', 507);// RFC4918
+define('ELGG_HTTP_LOOP_DETECTED', 508); // RFC5842
+define('ELGG_HTTP_NOT_EXTENDED', 510);// RFC2774
+define('ELGG_HTTP_NETWORK_AUTHENTICATION_REQUIRED', 511); // RFC6585
+
+/**
+ * Default JSON encoding
+ */
+define('ELGG_JSON_ENCODING', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 
 return function(\Elgg\EventsService $events, \Elgg\HooksRegistrationService $hooks) {
 	$events->registerHandler('boot', 'system', function () {
